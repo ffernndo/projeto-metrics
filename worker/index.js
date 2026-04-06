@@ -20,6 +20,13 @@ export default {
     }
 
     const url = new URL(request.url);
+
+    // Proxy de imagens: /img?url=https://...
+    const imgUrl = url.searchParams.get("img");
+    if (imgUrl) {
+      return proxyImage(imgUrl);
+    }
+
     const username = url.searchParams.get("username");
 
     if (!username || !/^[a-zA-Z0-9._]{1,30}$/.test(username)) {
@@ -330,4 +337,30 @@ function json(data, status = 200) {
     status,
     headers: CORS_HEADERS,
   });
+}
+
+async function proxyImage(imageUrl) {
+  try {
+    if (!imageUrl.startsWith("https://")) {
+      return new Response("URL invalida", { status: 400 });
+    }
+    const r = await fetch(imageUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+        "Accept": "image/webp,image/apng,image/*,*/*;q=0.8",
+        "Referer": "https://www.instagram.com/",
+      },
+    });
+    if (!r.ok) return new Response("Imagem nao encontrada", { status: 404 });
+    const contentType = r.headers.get("content-type") || "image/jpeg";
+    return new Response(r.body, {
+      headers: {
+        "Content-Type": contentType,
+        "Access-Control-Allow-Origin": "*",
+        "Cache-Control": "public, max-age=86400",
+      },
+    });
+  } catch (e) {
+    return new Response("Erro ao buscar imagem", { status: 500 });
+  }
 }

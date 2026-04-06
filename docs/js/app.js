@@ -61,6 +61,11 @@ function showError(title, msg) {
 
 const WORKER_URL = "https://atualizador.fernando-cezar-f-s.workers.dev";
 
+function proxyImg(url) {
+    if (!url) return "";
+    return WORKER_URL + "?img=" + encodeURIComponent(url);
+}
+
 async function fetchLiveProfile(username) {
     // Metodo 1: Cloudflare Worker
     try {
@@ -259,7 +264,7 @@ function renderOverview() {
     const tier = getTier(pr.followers);
     const initial = (pr.full_name || pr.username || "?")[0].toUpperCase();
     const avatarInner = pr.profile_pic_url
-        ? '<img src="' + pr.profile_pic_url + '" alt="' + pr.username + '" crossorigin="anonymous" onerror="this.remove();this.parentElement.textContent=\'' + initial + '\'">'
+        ? '<img src="' + proxyImg(pr.profile_pic_url) + '" alt="' + pr.username + '" onerror="this.remove();this.parentElement.textContent=\'' + initial + '\'">'
         : initial;
 
     let html = '<div class="section-title">Visao Geral</div>';
@@ -312,78 +317,47 @@ function renderPosts() {
     let html = '<div class="section-title">Analise de Posts</div>';
     html += '<div class="grid-2"><div class="card"><div class="card-title">Distribuicao de Engagement</div><div class="chart-container" id="ps-c1"></div></div>'
         + '<div class="card"><div class="card-title">Tipo de Conteudo</div><div class="chart-container-sm" id="ps-c2"></div></div></div>';
-    html += '<div class="card"><div class="card-title">Engagement por Tipo</div><div class="chart-container-sm" id="ps-c3"></div></div>';
-    html += '<div class="section-title">Posts</div>';
-    html += '<div class="card"><div class="table-wrap"><table id="posts-table"></table></div></div>';
+    html += '<div class="card"><div class="card-title">Engagement por Tipo de Midia</div><div class="chart-container-sm" id="ps-c3"></div></div>';
+
+    // Posts grid
+    html += '<div class="section-title">Ultimas Publicacoes</div>';
+    html += '<p class="posts-note">Exibindo os ' + df.length + ' posts mais recentes (limitacao da API publica do Instagram)</p>';
+
+    const sorted = [...df].sort((a, b) => b.date - a.date);
+    html += '<div class="posts-grid">';
+    sorted.forEach(p => {
+        const cap = p.caption || "Sem legenda";
+        const thumbUrl = p.thumbnail_url ? proxyImg(p.thumbnail_url) : "";
+        const postUrl = p.url || "";
+        const typeClass = p.media_type.toLowerCase();
+        const imgTag = thumbUrl
+            ? '<img class="post-card-img" src="' + thumbUrl + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">'
+            : '<div class="post-card-img" style="display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:.82rem">Sem imagem</div>';
+
+        html += '<div class="post-card">'
+            + imgTag
+            + '<div class="post-card-body">'
+            + '<div class="post-card-header">'
+            + '<span class="post-card-date">' + p.date.toLocaleDateString("pt-BR") + '</span>'
+            + '<span class="post-card-type ' + typeClass + '">' + p.media_type + '</span>'
+            + '</div>'
+            + '<p class="post-card-caption">' + cap + '</p>'
+            + '<div class="post-card-metrics">'
+            + '<div class="post-card-metric"><span class="post-card-metric-value">' + fmt(p.likes) + '</span><span class="post-card-metric-label">Likes</span></div>'
+            + '<div class="post-card-metric"><span class="post-card-metric-value">' + fmt(p.comments) + '</span><span class="post-card-metric-label">Comments</span></div>'
+            + '<div class="post-card-metric"><span class="post-card-metric-value">' + p.engagement_rate.toFixed(3) + '%</span><span class="post-card-metric-label">Engagement</span></div>'
+            + '<div class="post-card-metric"><span class="post-card-metric-value">' + p.hashtags.length + '</span><span class="post-card-metric-label">Tags</span></div>'
+            + '</div>'
+            + (postUrl ? '<div class="post-card-footer"><a href="' + postUrl + '" target="_blank" rel="noopener" class="post-link">Ver no Instagram →</a></div>' : '')
+            + '</div></div>';
+    });
+    html += '</div>';
 
     document.getElementById("sec-posts").innerHTML = html;
 
     chartEngagementDist(document.getElementById("ps-c1"), df);
     chartMediaPie(document.getElementById("ps-c2"), df);
     chartTypeEng(document.getElementById("ps-c3"), df);
-    renderPostsTable();
-}
-
-function renderPostsTable() {
-    const df = currentProfile.posts;
-    const sorted = [...df].sort((a, b) => {
-        let va, vb;
-        switch (postSortCol) {
-            case "likes": va = a.likes; vb = b.likes; break;
-            case "comments": va = a.comments; vb = b.comments; break;
-            case "engagement_rate": va = a.engagement_rate; vb = b.engagement_rate; break;
-            case "hashtags": va = a.hashtags.length; vb = b.hashtags.length; break;
-            case "date": va = a.date.getTime(); vb = b.date.getTime(); break;
-            default: va = a.engagement_rate; vb = b.engagement_rate;
-        }
-        return postSortAsc ? va - vb : vb - va;
-    });
-
-    function thClass(col) {
-        if (postSortCol !== col) return 'sortable';
-        return 'sortable ' + (postSortAsc ? 'sort-asc' : 'sort-desc');
-    }
-
-    let h = '<thead><tr>'
-        + '<th style="width:50px"></th>'
-        + '<th class="' + thClass("date") + '" data-sort="date">Post</th>'
-        + '<th class="' + thClass("likes") + ' td-right" data-sort="likes">Likes</th>'
-        + '<th class="' + thClass("comments") + ' td-right" data-sort="comments">Comments</th>'
-        + '<th class="' + thClass("engagement_rate") + ' td-right" data-sort="engagement_rate">Engagement</th>'
-        + '<th class="' + thClass("hashtags") + ' td-right" data-sort="hashtags">Tags</th>'
-        + '</tr></thead><tbody>';
-
-    sorted.forEach(p => {
-        const cap = p.caption.length > 50 ? p.caption.slice(0, 50) + "..." : (p.caption || "—");
-        const thumbUrl = p.thumbnail_url || "";
-        const postUrl = p.url || "";
-        const thumbHtml = thumbUrl
-            ? '<div class="post-thumb"><img src="' + thumbUrl + '" alt="" crossorigin="anonymous" onerror="this.style.display=\'none\'"><div class="post-thumb-badge">' + p.media_type + '</div></div>'
-            : '<div class="post-thumb"><div class="post-thumb-badge">' + p.media_type + '</div></div>';
-        const link = postUrl ? ' <a href="' + postUrl + '" target="_blank" rel="noopener" class="post-link">ver →</a>' : '';
-
-        h += '<tr>'
-            + '<td>' + thumbHtml + '</td>'
-            + '<td class="td-caption">' + p.date.toLocaleDateString("pt-BR") + ' — ' + cap + link + '</td>'
-            + '<td class="td-mono td-right">' + fmt(p.likes) + '</td>'
-            + '<td class="td-mono td-right">' + fmt(p.comments) + '</td>'
-            + '<td class="td-mono td-right">' + p.engagement_rate.toFixed(3) + '%</td>'
-            + '<td class="td-mono td-right">' + p.hashtags.length + '</td>'
-            + '</tr>';
-    });
-
-    h += '</tbody>';
-    document.getElementById("posts-table").innerHTML = h;
-
-    // Bind sort
-    document.querySelectorAll("#posts-table th.sortable").forEach(th => {
-        th.addEventListener("click", () => {
-            const col = th.dataset.sort;
-            if (postSortCol === col) postSortAsc = !postSortAsc;
-            else { postSortCol = col; postSortAsc = false; }
-            renderPostsTable();
-        });
-    });
 }
 
 // ═══════════════════════════════════════
