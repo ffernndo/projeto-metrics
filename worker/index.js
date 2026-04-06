@@ -98,15 +98,7 @@ async function tryWebProfileAPI(username) {
 
     if (profile.followers === 0 && !user.edge_followed_by) return null;
 
-    // Extrair posts iniciais (12)
-    const posts = [];
-    const timeline = user.edge_owner_to_timeline_media;
-    const edges = timeline?.edges || [];
-    for (const edge of edges) {
-      posts.push(parseEdgeNode(edge.node));
-    }
-
-    // Paginar via Feed API para buscar mais posts (ate 50 total)
+    // Buscar posts via Feed API (paginacao completa, ate 100 posts)
     const userId = user.id;
     const TARGET_POSTS = 100;
     const FEED_HEADERS = {
@@ -116,17 +108,16 @@ async function tryWebProfileAPI(username) {
       "Accept": "application/json",
     };
 
-    let nextMaxId = null;
-    if (edges.length > 0) {
-      const lastNode = edges[edges.length - 1]?.node;
-      nextMaxId = lastNode?.id || lastNode?.shortcode || null;
-    }
-
+    const posts = [];
+    let nextMaxId = "";
     let attempts = 0;
-    while (nextMaxId && posts.length < TARGET_POSTS && attempts < 8) {
+
+    while (posts.length < TARGET_POSTS && attempts < 8) {
       attempts++;
       try {
-        const feedUrl = `https://i.instagram.com/api/v1/feed/user/${userId}/?count=33&max_id=${nextMaxId}`;
+        const feedUrl = nextMaxId
+          ? `https://i.instagram.com/api/v1/feed/user/${userId}/?count=33&max_id=${nextMaxId}`
+          : `https://i.instagram.com/api/v1/feed/user/${userId}/?count=33`;
         const feedR = await fetch(feedUrl, { headers: FEED_HEADERS });
         if (!feedR.ok) break;
         const feedData = await feedR.json();
@@ -136,8 +127,8 @@ async function tryWebProfileAPI(username) {
           if (posts.length >= TARGET_POSTS) break;
           posts.push(parseFeedItem(item));
         }
-        nextMaxId = feedData.next_max_id || null;
-        if (!feedData.more_available) break;
+        nextMaxId = feedData.next_max_id || "";
+        if (!feedData.more_available || !nextMaxId) break;
       } catch (e) {
         break;
       }
