@@ -106,34 +106,39 @@ async function tryWebProfileAPI(username) {
       posts.push(parseEdgeNode(edge.node));
     }
 
-    // Paginar para buscar mais posts (ate 50 total)
+    // Paginar via Feed API para buscar mais posts (ate 50 total)
     const userId = user.id;
-    let endCursor = timeline?.page_info?.end_cursor;
-    let hasNext = timeline?.page_info?.has_next_page;
     const TARGET_POSTS = 50;
-    const API_HEADERS = {
+    const FEED_HEADERS = {
       "User-Agent": "Instagram 275.0.0.27.98 Android (33/13; 420dpi; 1080x2400; samsung; SM-G991B; o1s; exynos2100; en_US; 458229258)",
       "X-IG-App-ID": "936619743392459",
       "X-IG-WWW-Claim": "0",
-      "X-Requested-With": "XMLHttpRequest",
       "Accept": "application/json",
     };
 
-    while (hasNext && endCursor && posts.length < TARGET_POSTS) {
+    let nextMaxId = null;
+    // Pegar o max_id do ultimo post inicial
+    if (posts.length > 0) {
+      const lastEdge = edges[edges.length - 1];
+      nextMaxId = lastEdge?.node?.id || null;
+    }
+
+    let attempts = 0;
+    while (nextMaxId && posts.length < TARGET_POSTS && attempts < 4) {
+      attempts++;
       try {
-        const vars = JSON.stringify({ id: userId, first: 50, after: endCursor });
-        const gqlUrl = `https://www.instagram.com/graphql/query/?query_hash=e769aa130647d2571c27c44f6720b270&variables=${encodeURIComponent(vars)}`;
-        const gqlR = await fetch(gqlUrl, { headers: API_HEADERS });
-        if (!gqlR.ok) break;
-        const gqlData = await gqlR.json();
-        const media = gqlData?.data?.user?.edge_owner_to_timeline_media;
-        if (!media || !media.edges || media.edges.length === 0) break;
-        for (const edge of media.edges) {
+        const feedUrl = `https://i.instagram.com/api/v1/feed/user/${userId}/?count=33&max_id=${nextMaxId}`;
+        const feedR = await fetch(feedUrl, { headers: FEED_HEADERS });
+        if (!feedR.ok) break;
+        const feedData = await feedR.json();
+        const items = feedData?.items;
+        if (!items || items.length === 0) break;
+        for (const item of items) {
           if (posts.length >= TARGET_POSTS) break;
-          posts.push(parseEdgeNode(edge.node));
+          posts.push(parseFeedItem(item));
         }
-        endCursor = media.page_info?.end_cursor;
-        hasNext = media.page_info?.has_next_page;
+        nextMaxId = feedData.next_max_id || null;
+        if (!feedData.more_available) break;
       } catch (e) {
         break;
       }
@@ -215,6 +220,32 @@ async function tryMobilePage(username) {
 }
 
 // --- Helpers ---
+function parseFeedItem(item) {
+  const isVideo = item.media_type === 2;
+  const isCarousel = item.media_type === 8;
+  let thumbUrl = "";
+  if (item.image_versions2?.candidates?.length > 0) {
+    thumbUrl = item.image_versions2.candidates[0].url;
+  } else if (isCarousel && item.carousel_media?.length > 0) {
+    const first = item.carousel_media[0];
+    if (first.image_versions2?.candidates?.length > 0) {
+      thumbUrl = first.image_versions2.candidates[0].url;
+    }
+  }
+  return {
+    shortcode: item.code || "",
+    caption: item.caption?.text || "",
+    likes: item.like_count || 0,
+    comments: item.comment_count || 0,
+    timestamp: new Date((item.taken_at || 0) * 1000).toISOString(),
+    media_type: isCarousel ? "CAROUSEL" : isVideo ? "VIDEO" : "IMAGE",
+    is_video: isVideo,
+    video_view_count: item.view_count || item.play_count || null,
+    url: item.code ? `https://www.instagram.com/p/${item.code}/` : "",
+    thumbnail_url: thumbUrl,
+  };
+}
+
 function parseEdgeNode(node) {
   return {
     shortcode: node.shortcode,
