@@ -98,23 +98,45 @@ async function tryWebProfileAPI(username) {
 
     if (profile.followers === 0 && !user.edge_followed_by) return null;
 
-    // Extrair posts se disponiveis
+    // Extrair posts iniciais (12)
     const posts = [];
-    const edges = user.edge_owner_to_timeline_media?.edges || [];
+    const timeline = user.edge_owner_to_timeline_media;
+    const edges = timeline?.edges || [];
     for (const edge of edges) {
-      const node = edge.node;
-      posts.push({
-        shortcode: node.shortcode,
-        caption: node.edge_media_to_caption?.edges?.[0]?.node?.text || "",
-        likes: node.edge_liked_by?.count || node.edge_media_preview_like?.count || 0,
-        comments: node.edge_media_to_comment?.count || 0,
-        timestamp: new Date(node.taken_at_timestamp * 1000).toISOString(),
-        media_type: node.is_video ? "VIDEO" : node.__typename === "GraphSidecar" ? "CAROUSEL" : "IMAGE",
-        is_video: node.is_video || false,
-        video_view_count: node.video_view_count || null,
-        url: `https://www.instagram.com/p/${node.shortcode}/`,
-        thumbnail_url: node.thumbnail_src || node.display_url || "",
-      });
+      posts.push(parseEdgeNode(edge.node));
+    }
+
+    // Paginar para buscar mais posts (ate 50 total)
+    const userId = user.id;
+    let endCursor = timeline?.page_info?.end_cursor;
+    let hasNext = timeline?.page_info?.has_next_page;
+    const TARGET_POSTS = 50;
+    const API_HEADERS = {
+      "User-Agent": "Instagram 275.0.0.27.98 Android (33/13; 420dpi; 1080x2400; samsung; SM-G991B; o1s; exynos2100; en_US; 458229258)",
+      "X-IG-App-ID": "936619743392459",
+      "X-IG-WWW-Claim": "0",
+      "X-Requested-With": "XMLHttpRequest",
+      "Accept": "application/json",
+    };
+
+    while (hasNext && endCursor && posts.length < TARGET_POSTS) {
+      try {
+        const vars = JSON.stringify({ id: userId, first: 50, after: endCursor });
+        const gqlUrl = `https://www.instagram.com/graphql/query/?query_hash=e769aa130647d2571c27c44f6720b270&variables=${encodeURIComponent(vars)}`;
+        const gqlR = await fetch(gqlUrl, { headers: API_HEADERS });
+        if (!gqlR.ok) break;
+        const gqlData = await gqlR.json();
+        const media = gqlData?.data?.user?.edge_owner_to_timeline_media;
+        if (!media || !media.edges || media.edges.length === 0) break;
+        for (const edge of media.edges) {
+          if (posts.length >= TARGET_POSTS) break;
+          posts.push(parseEdgeNode(edge.node));
+        }
+        endCursor = media.page_info?.end_cursor;
+        hasNext = media.page_info?.has_next_page;
+      } catch (e) {
+        break;
+      }
     }
 
     return { profile, posts: posts.length > 0 ? posts : null };
@@ -190,6 +212,22 @@ async function tryMobilePage(username) {
   } catch (e) {
     return null;
   }
+}
+
+// --- Helpers ---
+function parseEdgeNode(node) {
+  return {
+    shortcode: node.shortcode,
+    caption: node.edge_media_to_caption?.edges?.[0]?.node?.text || "",
+    likes: node.edge_liked_by?.count || node.edge_media_preview_like?.count || 0,
+    comments: node.edge_media_to_comment?.count || 0,
+    timestamp: new Date(node.taken_at_timestamp * 1000).toISOString(),
+    media_type: node.is_video ? "VIDEO" : node.__typename === "GraphSidecar" ? "CAROUSEL" : "IMAGE",
+    is_video: node.is_video || false,
+    video_view_count: node.video_view_count || null,
+    url: `https://www.instagram.com/p/${node.shortcode}/`,
+    thumbnail_url: node.thumbnail_src || node.display_url || "",
+  };
 }
 
 // --- Parsers ---
