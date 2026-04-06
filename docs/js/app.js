@@ -281,4 +281,19 @@ document.addEventListener("DOMContentLoaded", () => {
     document.querySelectorAll(".nav-btn").forEach(btn => btn.addEventListener("click", () => { if (currentProfile) navigateTo(btn.dataset.tab); }));
     // Clean error on input focus
     document.getElementById("hero-input").addEventListener("focus", () => { const err = document.getElementById("hero-error"); if (err) err.remove(); });
+
+    // Parallax box on hero
+    const hero = document.getElementById("hero");
+    const box = document.getElementById("hero-box");
+    if (hero && box) {
+        hero.addEventListener("mousemove", e => {
+            const rect = hero.getBoundingClientRect();
+            const cx = (e.clientX - rect.left) / rect.width - 0.5;
+            const cy = (e.clientY - rect.top) / rect.height - 0.5;
+            box.style.transform = "translateY(-50%) translate(" + (cx * 30) + "px, " + (cy * 20) + "px)";
+        });
+        hero.addEventListener("mouseleave", () => {
+            box.style.transform = "translateY(-50%)";
+        });
+    }
 });

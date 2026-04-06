@@ -98,7 +98,15 @@ async function tryWebProfileAPI(username) {
 
     if (profile.followers === 0 && !user.edge_followed_by) return null;
 
-    // Buscar posts via Feed API (paginacao completa, ate 100 posts)
+    // 1) Extrair posts iniciais do GraphQL response (12 posts)
+    const posts = [];
+    const timeline = user.edge_owner_to_timeline_media;
+    const edges = timeline?.edges || [];
+    for (const edge of edges) {
+      posts.push(parseEdgeNode(edge.node));
+    }
+
+    // 2) Tentar paginar via Feed API para mais posts (bonus, pode falhar sem auth)
     const userId = user.id;
     const TARGET_POSTS = 100;
     const FEED_HEADERS = {
@@ -108,16 +116,18 @@ async function tryWebProfileAPI(username) {
       "Accept": "application/json",
     };
 
-    const posts = [];
+    // Usar ultimo post ID como cursor inicial
     let nextMaxId = "";
-    let attempts = 0;
+    if (edges.length > 0) {
+      const lastId = edges[edges.length - 1]?.node?.id;
+      if (lastId) nextMaxId = lastId;
+    }
 
-    while (posts.length < TARGET_POSTS && attempts < 8) {
+    let attempts = 0;
+    while (nextMaxId && posts.length < TARGET_POSTS && attempts < 8) {
       attempts++;
       try {
-        const feedUrl = nextMaxId
-          ? `https://i.instagram.com/api/v1/feed/user/${userId}/?count=33&max_id=${nextMaxId}`
-          : `https://i.instagram.com/api/v1/feed/user/${userId}/?count=33`;
+        const feedUrl = `https://i.instagram.com/api/v1/feed/user/${userId}/?count=33&max_id=${nextMaxId}`;
         const feedR = await fetch(feedUrl, { headers: FEED_HEADERS });
         if (!feedR.ok) break;
         const feedData = await feedR.json();
@@ -130,7 +140,7 @@ async function tryWebProfileAPI(username) {
         nextMaxId = feedData.next_max_id || "";
         if (!feedData.more_available || !nextMaxId) break;
       } catch (e) {
-        break;
+        break; // Feed API falhou, mas ja temos os 12 posts iniciais
       }
     }
 
