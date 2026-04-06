@@ -1,14 +1,21 @@
-// ===== InstaMetrics - App Principal =====
-let currentProfile = null, currentPage = "overview", cache = {};
-let postSortCol = "engagement_rate", postSortAsc = false;
-let welcomeOriginalHTML = "";
+// ═══════════════════════════════════════
+// InstaMetrics — App Principal
+// ═══════════════════════════════════════
 
-// ===== Utilidades =====
+let currentProfile = null, currentTab = "overview", cache = {};
+let postSortCol = "engagement_rate", postSortAsc = false;
+let welcomeHTML = "";
+
+// ═══════════════════════════════════════
+// UTILIDADES
+// ═══════════════════════════════════════
+
 function fmt(n) {
     if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
     if (n >= 1e3) return (n / 1e3).toFixed(1) + "K";
     return String(Math.round(n));
 }
+
 function parseMetric(s) {
     if (!s) return 0;
     s = s.replace(/,/g, "").trim();
@@ -19,6 +26,7 @@ function parseMetric(s) {
     if (m[2] === "K" || m[2] === "k") v *= 1e3;
     return Math.round(v);
 }
+
 function getTier(f) {
     if (f < 1e4) return { n: "Nano", c: "#5eead4" };
     if (f < 1e5) return { n: "Micro", c: "#3fb950" };
@@ -26,27 +34,31 @@ function getTier(f) {
     if (f < 1e6) return { n: "Macro", c: "#58a6ff" };
     return { n: "Mega", c: "#bc8cff" };
 }
+
 function extractHashtags(t) { return (t.match(/#(\w+)/g) || []).map(h => h.slice(1)); }
-function showBanner(msg, type) {
-    const b = document.getElementById("banner");
-    b.className = "banner " + type;
-    b.textContent = msg;
-    b.style.display = "block";
-}
-function hideBanner() { document.getElementById("banner").style.display = "none"; }
 
-function showError(title, message) {
+function setStatus(msg, type) {
+    const el = document.getElementById("status-bar");
+    el.className = "status-bar" + (type ? " " + type : "");
+    el.textContent = msg;
+}
+
+function showError(title, msg) {
     document.getElementById("loading").style.display = "none";
-    document.getElementById("dashboard").style.display = "none";
-    const w = document.getElementById("welcome");
-    w.style.display = "flex";
-    w.innerHTML = '<div class="error-state">'
-        + '<div class="error-state-icon">⚠️</div>'
+    document.getElementById("welcome").style.display = "none";
+    document.querySelectorAll(".section").forEach(s => s.classList.remove("active"));
+    const sec = document.getElementById("sec-overview");
+    sec.classList.add("active");
+    sec.innerHTML = '<div class="error-state"><div class="error-state-icon">⚠️</div>'
         + '<div class="error-state-title">' + title + '</div>'
-        + '<div class="error-state-msg">' + message + '</div></div>';
+        + '<div class="error-state-msg">' + msg + '</div></div>';
+    setStatus(title, "error");
 }
 
-// ===== Busca Real via Cloudflare Worker =====
+// ═══════════════════════════════════════
+// FETCH — CLOUDFLARE WORKER + CORS PROXIES
+// ═══════════════════════════════════════
+
 const WORKER_URL = "https://atualizador.fernando-cezar-f-s.workers.dev";
 
 async function fetchLiveProfile(username) {
@@ -93,17 +105,14 @@ function parseInstagramHTML(html, username) {
         const nameFromDesc = desc.match(/from\s+(.+?)\s*\(@/);
         if (nameFromDesc) p.full_name = nameFromDesc[1].trim();
     }
-    const titleMatch = html.match(/<meta\s+(?:property|name)="og:title"\s+content="([^"]+)"/i) || html.match(/content="([^"]+)"\s+(?:property|name)="og:title"/i);
+    const titleMatch = html.match(/<meta\s+(?:property|name)="og:title"\s+content="([^"]+)"/i);
     if (titleMatch) {
         const t = titleMatch[1];
-        const nameFromTitle = t.match(/^(.+?)\s*\(@/) || t.match(/^(.+?)\s*[\|•·]/);
+        const nameFromTitle = t.match(/^(.+?)\s*\(@/);
         if (nameFromTitle && !p.full_name) p.full_name = nameFromTitle[1].trim();
-        if (t.includes("✓") || t.includes("Verified")) p.is_verified = true;
     }
-    const imgMatch = html.match(/<meta\s+(?:property|name)="og:image"\s+content="([^"]+)"/i) || html.match(/content="([^"]+)"\s+(?:property|name)="og:image"/i);
+    const imgMatch = html.match(/<meta\s+(?:property|name)="og:image"\s+content="([^"]+)"/i);
     if (imgMatch) p.profile_pic_url = imgMatch[1];
-    const bioMatch = html.match(/<meta\s+(?:property|name)="description"\s+content="([^"]+)"/i);
-    if (bioMatch) { const bio = bioMatch[1].split(" - ").slice(1).join(" - ").trim(); if (bio) p.biography = bio; }
     if (!p.full_name) p.full_name = username;
     if (p.followers === 0) return null;
     let posts = null;
@@ -120,8 +129,7 @@ function parseInstagramHTML(html, username) {
                 const edges = user.edge_owner_to_timeline_media?.edges || [];
                 if (edges.length > 0) {
                     posts = edges.map(e => {
-                        const n = e.node;
-                        const isV = n.is_video || false;
+                        const n = e.node; const isV = n.is_video || false;
                         let mt = "IMAGE"; if (n.__typename === "GraphSidecar") mt = "CAROUSEL"; else if (isV) mt = "VIDEO";
                         return { caption: (n.edge_media_to_caption?.edges?.[0]?.node?.text) || "", likes: n.edge_liked_by?.count || n.edge_media_preview_like?.count || 0, comments: n.edge_media_to_comment?.count || 0, timestamp: new Date(n.taken_at_timestamp * 1000).toISOString(), media_type: mt, is_video: isV, video_view_count: n.video_view_count || null };
                     });
@@ -132,7 +140,10 @@ function parseInstagramHTML(html, username) {
     return { profile: p, posts };
 }
 
-// ===== Processamento =====
+// ═══════════════════════════════════════
+// PROCESSAMENTO DE DADOS
+// ═══════════════════════════════════════
+
 function processData(raw) {
     const pr = raw.profile, f = pr.followers;
     const posts = (raw.posts && raw.posts.length > 0) ? raw.posts : [];
@@ -149,28 +160,16 @@ function processData(raw) {
     const tL = df.reduce((s, p) => s + p.likes, 0), tC = df.reduce((s, p) => s + p.comments, 0);
     const lcR = tC > 0 ? Math.round(tL / tC) : 0;
     let ppw = 0;
-    if (df.length >= 2) {
-        const dates = df.map(p => p.date.getTime());
-        const range = (Math.max(...dates) - Math.min(...dates)) / 864e5;
-        ppw = df.length / Math.max(range / 7, 1);
-    }
+    if (df.length >= 2) { const dates = df.map(p => p.date.getTime()); const range = (Math.max(...dates) - Math.min(...dates)) / 864e5; ppw = df.length / Math.max(range / 7, 1); }
     const ffR = pr.following > 0 ? Math.round(pr.followers / pr.following) : 0;
     const dayE = {}, hourE = {};
     const dayN = ["Domingo", "Segunda", "Terca", "Quarta", "Quinta", "Sexta", "Sabado"];
-    df.forEach(p => {
-        const d = p.date.getDay();
-        if (!dayE[d]) dayE[d] = [];
-        dayE[d].push(p.engagement_rate);
-        const h = p.hour;
-        if (!hourE[h]) hourE[h] = [];
-        hourE[h].push(p.engagement_rate);
-    });
+    df.forEach(p => { const d = p.date.getDay(); if (!dayE[d]) dayE[d] = []; dayE[d].push(p.engagement_rate); const h = p.hour; if (!hourE[h]) hourE[h] = []; hourE[h].push(p.engagement_rate); });
     let bDay = "N/A", bDayV = 0;
     Object.entries(dayE).forEach(([d, r]) => { const a = r.reduce((x, y) => x + y, 0) / r.length; if (a > bDayV) { bDayV = a; bDay = dayN[parseInt(d)]; } });
     let bHour = 0, bHourV = 0;
     Object.entries(hourE).forEach(([h, r]) => { const a = r.reduce((x, y) => x + y, 0) / r.length; if (a > bHourV) { bHourV = a; bHour = parseInt(h); } });
-    const htC = {};
-    df.forEach(p => p.hashtags.forEach(h => { htC[h] = (htC[h] || 0) + 1; }));
+    const htC = {}; df.forEach(p => p.hashtags.forEach(h => { htC[h] = (htC[h] || 0) + 1; }));
     const shortC = df.filter(p => p.caption.length < 100), longC = df.filter(p => p.caption.length >= 300);
     const sE = shortC.length > 0 ? shortC.reduce((s, p) => s + p.engagement_rate, 0) / shortC.length : 0;
     const lE = longC.length > 0 ? longC.reduce((s, p) => s + p.engagement_rate, 0) / longC.length : 0;
@@ -180,22 +179,25 @@ function processData(raw) {
     return { profile: pr, posts: df, metrics: { avgLikes: Math.round(aL), avgComments: Math.round(aC), avgEngagement: aE, totalLikes: tL, totalComments: tC, lcRatio: lcR, ppw: Math.round(ppw * 10) / 10, ffRatio: ffR, bestDay: bDay, bestHour: bHour, topHashtags: htC, total: df.length, shortEng: sE, longEng: lE, fewEng: fE, manyEng: mE } };
 }
 
-// ===== Carregar Perfil =====
+// ═══════════════════════════════════════
+// CARREGAR PERFIL
+// ═══════════════════════════════════════
+
 async function loadProfile(username) {
     username = username.toLowerCase().replace(/@/g, "").trim();
     if (!username) return;
-    // Restaurar welcome original caso tenha sido substituido por erro
-    const w = document.getElementById("welcome");
-    if (welcomeOriginalHTML) w.innerHTML = welcomeOriginalHTML;
+
+    // Restaurar welcome se tinha erro
+    if (welcomeHTML) document.getElementById("welcome").innerHTML = welcomeHTML;
 
     if (cache[username]) { currentProfile = cache[username]; showDashboard(username); return; }
 
-    w.style.display = "none";
-    document.getElementById("dashboard").style.display = "none";
+    document.getElementById("welcome").style.display = "none";
+    document.querySelectorAll(".section").forEach(s => { s.classList.remove("active"); s.innerHTML = ""; });
     const ld = document.getElementById("loading");
     document.getElementById("loading-user").textContent = "@" + username;
-    ld.style.display = "block";
-    hideBanner();
+    ld.style.display = "flex";
+    setStatus("Buscando @" + username + "...");
 
     let raw = null;
     try {
@@ -205,42 +207,42 @@ async function loadProfile(username) {
         if (e.message === "NOT_FOUND") {
             showError("Perfil nao encontrado", "@" + username + " nao existe ou e um perfil privado.");
         } else {
-            showError("Erro ao buscar dados", "Nao foi possivel conectar ao servidor. Tente novamente em alguns instantes.");
+            showError("Erro ao buscar dados", "Nao foi possivel conectar ao servidor. Tente novamente.");
         }
         return;
     }
 
     ld.style.display = "none";
-    if (!raw) {
-        showError("Perfil nao encontrado", "Nao foi possivel carregar dados de @" + username + ". Verifique se o perfil e publico.");
-        return;
-    }
+    if (!raw) { showError("Perfil nao encontrado", "Nao foi possivel carregar dados de @" + username + ". Verifique se o perfil e publico."); return; }
 
-    const processed = processData(raw);
-    cache[username] = processed;
-    currentProfile = processed;
+    currentProfile = processData(raw);
+    cache[username] = currentProfile;
     showDashboard(username);
 }
 
 function showDashboard(username) {
     document.getElementById("welcome").style.display = "none";
-    document.getElementById("dashboard").style.display = "block";
-    showBanner("Dados reais de @" + username + " carregados com sucesso", "success");
+    document.getElementById("loading").style.display = "none";
+    setStatus("@" + username + " — " + fmt(currentProfile.profile.followers) + " seguidores — " + currentProfile.metrics.total + " posts analisados", "success");
     navigateTo("overview");
 }
 
-// ===== Navegacao =====
-function navigateTo(page) {
-    currentPage = page;
-    document.querySelectorAll(".nav-item").forEach(el => el.classList.remove("active"));
-    document.querySelector('[data-page="' + page + '"]').classList.add("active");
-    document.querySelectorAll(".page").forEach(el => el.classList.remove("active"));
-    document.getElementById("page-" + page).classList.add("active");
-    if (currentProfile) renderPage(page);
+// ═══════════════════════════════════════
+// NAVEGACAO (TABS)
+// ═══════════════════════════════════════
+
+function navigateTo(tab) {
+    currentTab = tab;
+    document.querySelectorAll(".nav-btn").forEach(b => b.classList.remove("active"));
+    const activeBtn = document.querySelector('[data-tab="' + tab + '"]');
+    if (activeBtn) activeBtn.classList.add("active");
+    document.querySelectorAll(".section").forEach(s => s.classList.remove("active"));
+    document.getElementById("sec-" + tab).classList.add("active");
+    if (currentProfile) renderSection(tab);
 }
 
-function renderPage(page) {
-    switch (page) {
+function renderSection(tab) {
+    switch (tab) {
         case "overview": renderOverview(); break;
         case "posts": renderPosts(); break;
         case "temporal": renderTemporal(); break;
@@ -248,7 +250,10 @@ function renderPage(page) {
     }
 }
 
-// ===== Render: Overview =====
+// ═══════════════════════════════════════
+// RENDER: VISAO GERAL
+// ═══════════════════════════════════════
+
 function renderOverview() {
     const { profile: pr, posts: df, metrics: m } = currentProfile;
     const tier = getTier(pr.followers);
@@ -256,42 +261,71 @@ function renderOverview() {
     const avatarInner = pr.profile_pic_url
         ? '<img src="' + pr.profile_pic_url + '" alt="' + pr.username + '" crossorigin="anonymous" onerror="this.remove();this.parentElement.textContent=\'' + initial + '\'">'
         : initial;
-    document.getElementById("ov-profile").innerHTML =
-        '<div class="profile-header"><div class="profile-avatar" style="background:' + tier.c + '">' + avatarInner + '</div>'
-        + '<div class="profile-info"><div class="name">' + pr.full_name + (pr.is_verified ? ' <span class="verified-badge">✓ Verificado</span>' : '') + '</div>'
+
+    let html = '<div class="section-title">Visao Geral</div>';
+
+    // Profile card
+    html += '<div class="profile-card"><div class="profile-header">'
+        + '<div class="profile-avatar" style="background:' + tier.c + '">' + avatarInner + '</div>'
+        + '<div class="profile-info"><div class="name">' + pr.full_name + (pr.is_verified ? ' <span class="verified-badge">Verificado</span>' : '') + '</div>'
         + '<div class="username">@' + pr.username + '</div>'
         + '<span class="tier-badge" style="background:' + tier.c + '22;color:' + tier.c + ';border:1px solid ' + tier.c + '44">' + tier.n + '</span></div></div>'
-        + '<p class="profile-bio">' + pr.biography + '</p>'
+        + (pr.biography ? '<p class="profile-bio">' + pr.biography + '</p>' : '')
         + '<div class="stat-row"><div class="stat-item"><div class="stat-value">' + fmt(pr.followers) + '</div><div class="stat-label">Seguidores</div></div>'
         + '<div class="stat-item"><div class="stat-value">' + fmt(pr.following) + '</div><div class="stat-label">Seguindo</div></div>'
-        + '<div class="stat-item"><div class="stat-value">' + fmt(pr.media_count) + '</div><div class="stat-label">Posts</div></div></div>';
-    document.getElementById("ov-kpis").innerHTML =
-        '<div class="kpi-card"><div class="kpi-icon">👥</div><div class="kpi-label">Seguidores</div><div class="kpi-value">' + fmt(pr.followers) + '</div></div>'
-        + '<div class="kpi-card"><div class="kpi-icon">📈</div><div class="kpi-label">Engagement Rate</div><div class="kpi-value">' + m.avgEngagement.toFixed(2) + '%</div></div>'
-        + '<div class="kpi-card"><div class="kpi-icon">❤️</div><div class="kpi-label">Media de Likes</div><div class="kpi-value">' + fmt(m.avgLikes) + '</div></div>'
-        + '<div class="kpi-card"><div class="kpi-icon">📅</div><div class="kpi-label">Posts/Semana</div><div class="kpi-value">' + m.ppw + '</div></div>';
-    document.getElementById("ov-insights").innerHTML =
-        '<div class="insight-card"><div class="insight-value">' + fmt(m.avgComments) + '</div><div class="insight-label">Media Comentarios</div></div>'
-        + '<div class="insight-card"><div class="insight-value">' + m.lcRatio + ':1</div><div class="insight-label">Likes / Comments</div></div>'
-        + '<div class="insight-card"><div class="insight-value">' + m.ffRatio + ':1</div><div class="insight-label">Seguidores / Seguindo</div></div>'
-        + '<div class="insight-card"><div class="insight-value">' + m.total + '</div><div class="insight-label">Posts Analisados</div></div>';
+        + '<div class="stat-item"><div class="stat-value">' + fmt(pr.media_count) + '</div><div class="stat-label">Posts</div></div></div></div>';
+
+    // KPIs
+    html += '<div class="kpi-grid">'
+        + kpi("Seguidores", fmt(pr.followers)) + kpi("Engagement Rate", m.avgEngagement.toFixed(2) + "%")
+        + kpi("Media de Likes", fmt(m.avgLikes)) + kpi("Posts / Semana", m.ppw)
+        + '</div>';
+
+    // Insights
+    html += '<div class="insight-grid">'
+        + insight(fmt(m.avgComments), "Media Comentarios") + insight(m.lcRatio + ":1", "Likes / Comments")
+        + insight(m.ffRatio + ":1", "Seguidores / Seguindo") + insight(m.total, "Posts Analisados")
+        + '</div>';
+
+    // Charts
+    if (df.length > 0) {
+        html += '<div class="grid-2"><div class="card"><div class="card-title">Engagement ao Longo do Tempo</div><div class="chart-container" id="ov-c1"></div></div>'
+            + '<div class="card"><div class="card-title">Top Posts por Engagement</div><div class="chart-container" id="ov-c2"></div></div></div>';
+    }
+
+    document.getElementById("sec-overview").innerHTML = html;
+
     if (df.length > 0) {
         chartEngagementLine(document.getElementById("ov-c1"), df);
         chartTopPostsBar(document.getElementById("ov-c2"), df);
     }
 }
 
-// ===== Render: Posts =====
+// ═══════════════════════════════════════
+// RENDER: ANALISE DE POSTS
+// ═══════════════════════════════════════
+
 function renderPosts() {
-    const { posts: df, metrics: m } = currentProfile;
-    if (df.length === 0) { document.getElementById("ps-table").innerHTML = '<p style="text-align:center;color:var(--text-muted);padding:40px">Nenhum post disponivel para analise</p>'; return; }
+    const { posts: df } = currentProfile;
+    if (df.length === 0) { document.getElementById("sec-posts").innerHTML = '<div class="error-state"><div class="error-state-msg">Nenhum post disponivel para analise</div></div>'; return; }
+
+    let html = '<div class="section-title">Analise de Posts</div>';
+    html += '<div class="grid-2"><div class="card"><div class="card-title">Distribuicao de Engagement</div><div class="chart-container" id="ps-c1"></div></div>'
+        + '<div class="card"><div class="card-title">Tipo de Conteudo</div><div class="chart-container-sm" id="ps-c2"></div></div></div>';
+    html += '<div class="card"><div class="card-title">Engagement por Tipo</div><div class="chart-container-sm" id="ps-c3"></div></div>';
+    html += '<div class="section-title">Posts</div>';
+    html += '<div class="card"><div class="table-wrap"><table id="posts-table"></table></div></div>';
+
+    document.getElementById("sec-posts").innerHTML = html;
+
     chartEngagementDist(document.getElementById("ps-c1"), df);
     chartMediaPie(document.getElementById("ps-c2"), df);
     chartTypeEng(document.getElementById("ps-c3"), df);
-    renderPostsTable(df);
+    renderPostsTable();
 }
 
-function renderPostsTable(df) {
+function renderPostsTable() {
+    const df = currentProfile.posts;
     const sorted = [...df].sort((a, b) => {
         let va, vb;
         switch (postSortCol) {
@@ -305,92 +339,90 @@ function renderPostsTable(df) {
         return postSortAsc ? va - vb : vb - va;
     });
 
-    function arrow(col) {
-        if (postSortCol !== col) return '<span class="sort-arrow">⇅</span>';
-        return '<span class="sort-arrow active">' + (postSortAsc ? '▲' : '▼') + '</span>';
+    function thClass(col) {
+        if (postSortCol !== col) return 'sortable';
+        return 'sortable ' + (postSortAsc ? 'sort-asc' : 'sort-desc');
     }
 
-    let h = '<div class="post-row post-row-header">'
-        + '<div></div>'
-        + '<div data-sort="date">Post ' + arrow("date") + '</div>'
-        + '<div data-sort="likes" style="text-align:right">Likes ' + arrow("likes") + '</div>'
-        + '<div data-sort="comments" style="text-align:right">Comments ' + arrow("comments") + '</div>'
-        + '<div data-sort="engagement_rate" style="text-align:right">Engagement ' + arrow("engagement_rate") + '</div>'
-        + '<div data-sort="hashtags" style="text-align:right">Hashtags ' + arrow("hashtags") + '</div>'
-        + '</div>';
+    let h = '<thead><tr>'
+        + '<th style="width:50px"></th>'
+        + '<th class="' + thClass("date") + '" data-sort="date">Post</th>'
+        + '<th class="' + thClass("likes") + ' td-right" data-sort="likes">Likes</th>'
+        + '<th class="' + thClass("comments") + ' td-right" data-sort="comments">Comments</th>'
+        + '<th class="' + thClass("engagement_rate") + ' td-right" data-sort="engagement_rate">Engagement</th>'
+        + '<th class="' + thClass("hashtags") + ' td-right" data-sort="hashtags">Tags</th>'
+        + '</tr></thead><tbody>';
 
     sorted.forEach(p => {
-        const cap = p.caption.length > 60 ? p.caption.slice(0, 60) + "..." : (p.caption || "Sem legenda");
+        const cap = p.caption.length > 50 ? p.caption.slice(0, 50) + "..." : (p.caption || "—");
         const thumbUrl = p.thumbnail_url || "";
         const postUrl = p.url || "";
         const thumbHtml = thumbUrl
             ? '<div class="post-thumb"><img src="' + thumbUrl + '" alt="" crossorigin="anonymous" onerror="this.style.display=\'none\'"><div class="post-thumb-badge">' + p.media_type + '</div></div>'
             : '<div class="post-thumb"><div class="post-thumb-badge">' + p.media_type + '</div></div>';
-        const linkHtml = postUrl ? '<a href="' + postUrl + '" target="_blank" rel="noopener" class="post-link">Ver no Instagram →</a>' : '';
+        const link = postUrl ? ' <a href="' + postUrl + '" target="_blank" rel="noopener" class="post-link">ver →</a>' : '';
 
-        h += '<div class="post-row">'
-            + thumbHtml
-            + '<div class="post-caption"><span class="post-type">' + p.media_type + '</span> · ' + p.date.toLocaleDateString("pt-BR") + '<br>' + cap + '<br>' + linkHtml + '</div>'
-            + '<div class="post-metric">' + fmt(p.likes) + '</div>'
-            + '<div class="post-metric">' + fmt(p.comments) + '</div>'
-            + '<div class="post-metric">' + p.engagement_rate.toFixed(2) + '%</div>'
-            + '<div class="post-metric">' + p.hashtags.length + '</div>'
-            + '</div>';
+        h += '<tr>'
+            + '<td>' + thumbHtml + '</td>'
+            + '<td class="td-caption">' + p.date.toLocaleDateString("pt-BR") + ' — ' + cap + link + '</td>'
+            + '<td class="td-mono td-right">' + fmt(p.likes) + '</td>'
+            + '<td class="td-mono td-right">' + fmt(p.comments) + '</td>'
+            + '<td class="td-mono td-right">' + p.engagement_rate.toFixed(3) + '%</td>'
+            + '<td class="td-mono td-right">' + p.hashtags.length + '</td>'
+            + '</tr>';
     });
 
-    document.getElementById("ps-table").innerHTML = h;
+    h += '</tbody>';
+    document.getElementById("posts-table").innerHTML = h;
 
-    // Bind sort events
-    document.querySelectorAll(".post-row-header div[data-sort]").forEach(el => {
-        el.addEventListener("click", () => {
-            const col = el.dataset.sort;
-            if (postSortCol === col) { postSortAsc = !postSortAsc; }
+    // Bind sort
+    document.querySelectorAll("#posts-table th.sortable").forEach(th => {
+        th.addEventListener("click", () => {
+            const col = th.dataset.sort;
+            if (postSortCol === col) postSortAsc = !postSortAsc;
             else { postSortCol = col; postSortAsc = false; }
-            renderPostsTable(df);
+            renderPostsTable();
         });
     });
 }
 
-// ===== Render: Temporal =====
+// ═══════════════════════════════════════
+// RENDER: ANALISE TEMPORAL
+// ═══════════════════════════════════════
+
 function renderTemporal() {
     const { posts: df, metrics: m } = currentProfile;
+    if (df.length === 0) { document.getElementById("sec-temporal").innerHTML = '<div class="error-state"><div class="error-state-msg">Nenhum post disponivel para analise temporal</div></div>'; return; }
 
-    if (df.length === 0) {
-        document.getElementById("tp-best-time").innerHTML = '';
-        document.getElementById("tp-insights").innerHTML = '<p style="text-align:center;color:var(--text-muted);padding:40px;grid-column:1/-1">Nenhum post disponivel para analise temporal</p>';
-        return;
-    }
-
-    // Calcular consistencia (100% - coeficiente de variacao dos posts semanais)
+    // Consistencia
     const weekCounts = {};
-    df.forEach(p => {
-        const d = p.date;
-        const weekStart = new Date(d); weekStart.setDate(d.getDate() - d.getDay());
-        const key = weekStart.toISOString().slice(0, 10);
-        weekCounts[key] = (weekCounts[key] || 0) + 1;
-    });
+    df.forEach(p => { const d = p.date; const ws = new Date(d); ws.setDate(d.getDate() - d.getDay()); const key = ws.toISOString().slice(0, 10); weekCounts[key] = (weekCounts[key] || 0) + 1; });
     const wVals = Object.values(weekCounts);
     let consistency = 100;
-    if (wVals.length > 1) {
-        const wMean = wVals.reduce((a, b) => a + b, 0) / wVals.length;
-        const wStd = Math.sqrt(wVals.reduce((s, v) => s + (v - wMean) ** 2, 0) / wVals.length);
-        consistency = wMean > 0 ? Math.max(0, Math.min(100, Math.round(100 - (wStd / wMean) * 100))) : 0;
-    }
+    if (wVals.length > 1) { const wMean = wVals.reduce((a, b) => a + b, 0) / wVals.length; const wStd = Math.sqrt(wVals.reduce((s, v) => s + (v - wMean) ** 2, 0) / wVals.length); consistency = wMean > 0 ? Math.max(0, Math.min(100, Math.round(100 - (wStd / wMean) * 100))) : 0; }
+
+    let html = '<div class="section-title">Analise Temporal</div>';
 
     // Best time card
-    document.getElementById("tp-best-time").innerHTML =
-        '<div class="best-time-card">'
-        + '<div class="best-time-item"><div class="best-time-label">Melhor Dia para Postar</div><div class="best-time-value">' + m.bestDay + '</div><div class="best-time-sub">Maior engagement medio</div></div>'
+    html += '<div class="best-time-card">'
+        + '<div class="best-time-item"><div class="best-time-label">Melhor Dia</div><div class="best-time-value">' + m.bestDay + '</div><div class="best-time-sub">Maior engagement medio</div></div>'
         + '<div class="best-time-item"><div class="best-time-label">Melhor Horario</div><div class="best-time-value">' + String(m.bestHour).padStart(2, "0") + ':00</div><div class="best-time-sub">Pico de interacoes</div></div>'
         + '<div class="best-time-item"><div class="best-time-label">Recomendacao</div><div class="best-time-value" style="font-size:1rem">' + m.bestDay + ' as ' + String(m.bestHour).padStart(2, "0") + 'h</div><div class="best-time-sub">Horario ideal para publicar</div></div>'
         + '</div>';
 
-    // 4 insight cards
-    document.getElementById("tp-insights").innerHTML =
-        '<div class="insight-card"><div class="insight-value">' + m.bestDay + '</div><div class="insight-label">Melhor Dia</div></div>'
-        + '<div class="insight-card"><div class="insight-value">' + String(m.bestHour).padStart(2, "0") + ':00</div><div class="insight-label">Melhor Horario</div></div>'
-        + '<div class="insight-card"><div class="insight-value">' + m.ppw + '</div><div class="insight-label">Posts / Semana</div></div>'
-        + '<div class="insight-card"><div class="insight-value">' + consistency + '%</div><div class="insight-label">Consistencia</div></div>';
+    // Insights
+    html += '<div class="insight-grid">'
+        + insight(m.bestDay, "Melhor Dia") + insight(String(m.bestHour).padStart(2, "0") + ":00", "Melhor Horario")
+        + insight(m.ppw, "Posts / Semana") + insight(consistency + "%", "Consistencia")
+        + '</div>';
+
+    // Charts
+    html += '<div class="card"><div class="card-title">Padrao de Postagem (Dia x Hora)</div><div class="chart-container" id="tp-c1"></div></div>';
+    html += '<div class="grid-2"><div class="card"><div class="card-title">Engagement por Dia da Semana</div><div class="chart-container" id="tp-c2"></div></div>'
+        + '<div class="card"><div class="card-title">Engagement por Hora do Dia</div><div class="chart-container" id="tp-c3"></div></div></div>';
+    html += '<div class="card"><div class="card-title">Frequencia de Postagem por Semana</div><div class="chart-container" id="tp-c4"></div></div>';
+
+    document.getElementById("sec-temporal").innerHTML = html;
 
     chartHeatmap(document.getElementById("tp-c1"), df);
     chartEngDay(document.getElementById("tp-c2"), df);
@@ -398,26 +430,63 @@ function renderTemporal() {
     chartFrequency(document.getElementById("tp-c4"), df);
 }
 
-// ===== Render: Content =====
+// ═══════════════════════════════════════
+// RENDER: INTELIGENCIA DE CONTEUDO
+// ═══════════════════════════════════════
+
 function renderContent() {
     const { posts: df, metrics: m } = currentProfile;
-    if (df.length === 0) return;
+    if (df.length === 0) { document.getElementById("sec-content").innerHTML = '<div class="error-state"><div class="error-state-msg">Nenhum post disponivel para analise</div></div>'; return; }
+
+    const cw = m.shortEng > m.longEng ? "Curtas (<100 chars)" : "Longas (300+ chars)";
+    const hw = m.fewEng > m.manyEng ? "Poucas (0-3)" : "Muitas (5+)";
+
+    let html = '<div class="section-title">Inteligencia de Conteudo</div>';
+    html += '<div class="card"><div class="card-title">Tamanho da Caption vs Engagement</div><div class="chart-container" id="ct-c1"></div></div>';
+    html += '<div class="grid-2"><div class="card"><div class="card-title">Hashtags Mais Utilizadas</div><div class="chart-container" id="ct-c2"></div></div>'
+        + '<div class="card"><div class="card-title">Engagement por Tipo de Midia</div><div class="chart-container-sm" id="ct-c3"></div></div></div>';
+
+    html += '<div class="section-title">Insights</div>';
+    html += '<div class="grid-2">'
+        + '<div class="card" style="text-align:center"><div class="insight-label">Captions que Performam Melhor</div><div class="insight-value" style="font-size:1.1rem;margin:8px 0">' + cw + '</div><div class="insight-sub">Curtas: ' + m.shortEng.toFixed(3) + '% — Longas: ' + m.longEng.toFixed(3) + '%</div></div>'
+        + '<div class="card" style="text-align:center"><div class="insight-label">Quantidade Ideal de Hashtags</div><div class="insight-value" style="font-size:1.1rem;margin:8px 0">' + hw + '</div><div class="insight-sub">0-3: ' + m.fewEng.toFixed(3) + '% — 5+: ' + m.manyEng.toFixed(3) + '%</div></div>'
+        + '</div>';
+
+    document.getElementById("sec-content").innerHTML = html;
+
     chartCaptionEng(document.getElementById("ct-c1"), df);
     chartHashtags(document.getElementById("ct-c2"), m.topHashtags);
     chartTypeEng(document.getElementById("ct-c3"), df);
-    const cw = m.shortEng > m.longEng ? "Curtas (<100 chars)" : "Longas (300+ chars)";
-    const hw = m.fewEng > m.manyEng ? "Poucas (0-3)" : "Muitas (5+)";
-    document.getElementById("ct-insights").innerHTML =
-        '<div class="chart-box insight-card"><div class="insight-label">Captions que Performam Melhor</div><div class="insight-value" style="font-size:17px">' + cw + '</div><div class="insight-sub">Curtas: ' + m.shortEng.toFixed(2) + '% · Longas: ' + m.longEng.toFixed(2) + '%</div></div>'
-        + '<div class="chart-box insight-card"><div class="insight-label">Quantidade Ideal de Hashtags</div><div class="insight-value" style="font-size:17px">' + hw + '</div><div class="insight-sub">0-3: ' + m.fewEng.toFixed(2) + '% · 5+: ' + m.manyEng.toFixed(2) + '%</div></div>';
 }
 
-// ===== Events =====
+// ═══════════════════════════════════════
+// HELPERS DE HTML
+// ═══════════════════════════════════════
+
+function kpi(label, value) {
+    return '<div class="kpi-card"><div class="kpi-label">' + label + '</div><div class="kpi-value">' + value + '</div></div>';
+}
+
+function insight(value, label) {
+    return '<div class="insight-card"><div class="insight-value">' + value + '</div><div class="insight-label">' + label + '</div></div>';
+}
+
+// ═══════════════════════════════════════
+// EVENTOS
+// ═══════════════════════════════════════
+
 document.addEventListener("DOMContentLoaded", () => {
-    welcomeOriginalHTML = document.getElementById("welcome").innerHTML;
+    welcomeHTML = document.getElementById("welcome").innerHTML;
+
+    // Search
     document.getElementById("btn-search").addEventListener("click", () => loadProfile(document.getElementById("search-input").value));
     document.getElementById("search-input").addEventListener("keypress", e => { if (e.key === "Enter") loadProfile(e.target.value); });
-    document.querySelectorAll(".nav-item").forEach(i => i.addEventListener("click", () => navigateTo(i.dataset.page)));
-    document.getElementById("mobile-toggle").addEventListener("click", () => document.getElementById("sidebar").classList.toggle("open"));
-    document.querySelectorAll(".nav-item").forEach(i => i.addEventListener("click", () => { if (window.innerWidth <= 768) document.getElementById("sidebar").classList.remove("open"); }));
+
+    // Nav tabs
+    document.querySelectorAll(".nav-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+            if (!currentProfile) return;
+            navigateTo(btn.dataset.tab);
+        });
+    });
 });
