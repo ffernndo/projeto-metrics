@@ -108,7 +108,7 @@ async function tryWebProfileAPI(username) {
 
     // Paginar via Feed API para buscar mais posts (ate 50 total)
     const userId = user.id;
-    const TARGET_POSTS = 50;
+    const TARGET_POSTS = 100;
     const FEED_HEADERS = {
       "User-Agent": "Instagram 275.0.0.27.98 Android (33/13; 420dpi; 1080x2400; samsung; SM-G991B; o1s; exynos2100; en_US; 458229258)",
       "X-IG-App-ID": "936619743392459",
@@ -117,14 +117,13 @@ async function tryWebProfileAPI(username) {
     };
 
     let nextMaxId = null;
-    // Pegar o max_id do ultimo post inicial
-    if (posts.length > 0) {
-      const lastEdge = edges[edges.length - 1];
-      nextMaxId = lastEdge?.node?.id || null;
+    if (edges.length > 0) {
+      const lastNode = edges[edges.length - 1]?.node;
+      nextMaxId = lastNode?.id || lastNode?.shortcode || null;
     }
 
     let attempts = 0;
-    while (nextMaxId && posts.length < TARGET_POSTS && attempts < 4) {
+    while (nextMaxId && posts.length < TARGET_POSTS && attempts < 8) {
       attempts++;
       try {
         const feedUrl = `https://i.instagram.com/api/v1/feed/user/${userId}/?count=33&max_id=${nextMaxId}`;
