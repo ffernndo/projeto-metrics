@@ -4,7 +4,7 @@ let currentProfile = null, currentPage = "overview", cache = {};
 // ===== Utilidades =====
 function fmt(n){if(n>=1e6)return(n/1e6).toFixed(1)+"M";if(n>=1e3)return(n/1e3).toFixed(1)+"K";return String(Math.round(n))}
 function parseMetric(s){if(!s)return 0;s=s.replace(/,/g,"").trim();const m=s.match(/([\d.]+)\s*(M|K|m|k)?/);if(!m)return 0;let v=parseFloat(m[1]);if(m[2]==="M"||m[2]==="m")v*=1e6;if(m[2]==="K"||m[2]==="k")v*=1e3;return Math.round(v)}
-function getTier(f){if(f<1e3)return{n:"Nano",c:"#06B6D4"};if(f<1e4)return{n:"Nano",c:"#06B6D4"};if(f<1e5)return{n:"Micro",c:"#00D68F"};if(f<5e5)return{n:"Mid-Tier",c:"#FDCB6E"};if(f<1e6)return{n:"Macro",c:"#EC4899"};return{n:"Mega",c:"#A855F7"}}
+function getTier(f){if(f<1e4)return{n:"Nano",c:"#5eead4"};if(f<1e5)return{n:"Micro",c:"#3fb950"};if(f<5e5)return{n:"Mid-Tier",c:"#d29922"};if(f<1e6)return{n:"Macro",c:"#58a6ff"};return{n:"Mega",c:"#bc8cff"}}
 function extractHashtags(t){return(t.match(/#(\w+)/g)||[]).map(h=>h.slice(1))}
 function showBanner(msg,type){const b=document.getElementById("banner");b.className="banner "+type;b.textContent=msg;b.style.display="block"}
 function hideBanner(){document.getElementById("banner").style.display="none"}
@@ -121,6 +121,15 @@ function generatePosts(profile,count){
     return posts;
 }
 
+// ===== Perfil Simulado (para qualquer username) =====
+function generateSimulatedProfile(username){
+    let h=0;for(let i=0;i<username.length;i++)h=((h<<5)-h)+username.charCodeAt(i);h=Math.abs(h);
+    const followers=50000+((h%450000));
+    const following=200+((h*7)%1800);
+    const mediaCount=100+((h*3)%2900);
+    return{profile:{username:username,full_name:"@"+username,biography:"Perfil publico do Instagram. Dados simulados para demonstracao.",followers:followers,following:following,media_count:mediaCount,is_verified:false,profile_pic_url:"",external_url:"",is_business:false},posts:null};
+}
+
 // ===== Demo Data =====
 const DEMO_PROFILES={
     natgeo:{profile:{username:"natgeo",full_name:"National Geographic",biography:"Experience the world through the eyes of National Geographic photographers.",followers:284000000,following:152,media_count:32500,is_verified:true,profile_pic_url:"",external_url:"https://natgeo.com",is_business:true}},
@@ -171,14 +180,8 @@ async function loadProfile(username){
     let raw=null,source="live";
     try{raw=await fetchLiveProfile(username)}catch(e){raw=null}
     if(!raw){
-        // Fallback to demo
         if(DEMO_PROFILES[username]){raw=DEMO_PROFILES[username];source="demo"}
-        else{
-            ld.style.display="none";
-            document.getElementById("welcome").style.display="flex";
-            showBanner("Perfil @"+username+" nao encontrado. Tente: natgeo, instagram, cristiano","error");
-            return;
-        }
+        else{raw=generateSimulatedProfile(username);source="simulated"}
     }
     const processed=processData(raw);
     processed._source=source;
@@ -191,7 +194,8 @@ async function loadProfile(username){
 function showDashboard(username,source){
     document.getElementById("dashboard").style.display="block";
     if(source==="live")showBanner("✅ Dados reais de @"+username+" carregados com sucesso","success");
-    else showBanner("📋 Modo Demo — dados simulados para @"+username,"warning");
+    else if(source==="demo")showBanner("📋 Perfil demo — dados pre-carregados para @"+username,"warning");
+    else showBanner("📊 Dados simulados para @"+username+" — busca real indisponivel","warning");
     navigateTo("overview");
 }
 
