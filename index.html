@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>InstaMetrics — Instagram Public Analytics</title>
-    <meta name="description" content="Dashboard de analytics publico para perfis do Instagram. Metricas de engajamento, analise temporal e inteligencia de conteudo.">
+    <meta name="description" content="Analise metricas reais de qualquer perfil publico do Instagram.">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect rx='12' width='100' height='100' fill='%230d1117'/><text x='50' y='68' text-anchor='middle' font-size='52'>📊</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,68 +12,56 @@
     <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
 </head>
 <body>
+<div class="main" id="app">
 
-    <!-- HEADER -->
+    <!-- HEADER (hidden until .calculated) -->
     <header class="header">
         <div class="header-left">
-            <div class="header-logo"><span>Insta</span>Metrics</div>
+            <span class="header-logo"><span>Insta</span>Metrics</span>
             <span class="header-badge">Analytics</span>
         </div>
         <div class="header-right">
-            <input type="text" class="header-search" id="search-input" placeholder="@username">
-            <button class="header-btn" id="btn-search">Analisar</button>
+            <input type="text" class="header-search" id="header-search" placeholder="@username">
+            <button class="header-btn" id="header-btn">Analisar</button>
         </div>
     </header>
 
-    <!-- NAV TABS -->
-    <nav class="nav" id="nav-tabs">
-        <button class="nav-btn active" data-tab="overview">Visao Geral</button>
-        <button class="nav-btn" data-tab="posts">Analise de Posts</button>
-        <button class="nav-btn" data-tab="temporal">Analise Temporal</button>
-        <button class="nav-btn" data-tab="content">Inteligencia de Conteudo</button>
-    </nav>
-
-    <!-- STATUS BAR -->
-    <div class="status-bar" id="status-bar">Pesquise um perfil publico do Instagram para comecar</div>
-
-    <!-- MAIN CONTENT -->
-    <main id="main-content">
-
-        <!-- WELCOME -->
-        <div id="welcome" class="welcome">
-            <h2><span>Insta</span>Metrics</h2>
-            <p>Analise metricas de qualquer perfil publico do Instagram</p>
-            <div class="welcome-instructions">
-                <h3>Como usar:</h3>
-                <ol>
-                    <li>Digite um <strong>@username</strong> no campo de pesquisa</li>
-                    <li>Clique em <strong>Analisar</strong></li>
-                    <li>Navegue pelas abas de analise</li>
-                </ol>
-                <p class="hint">Funciona com qualquer perfil publico do Instagram</p>
-            </div>
+    <!-- HERO (clean entry page) -->
+    <div class="hero" id="hero">
+        <h1><span>Insta</span>Metrics</h1>
+        <p class="subtitle">Analise metricas de qualquer perfil publico do Instagram</p>
+        <div class="hero-form">
+            <input type="text" class="hero-input" id="hero-input" placeholder="Digite o @username">
+            <button class="hero-btn" id="hero-btn">Analisar</button>
         </div>
+        <p class="hero-hint">Funciona com qualquer perfil publico</p>
+    </div>
 
-        <!-- LOADING -->
-        <div id="loading" class="loading" style="display:none">
-            <div class="spinner"></div>
-            <span>Buscando dados de <strong id="loading-user"></strong>...</span>
+    <!-- LOADING -->
+    <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <span>Buscando dados de <strong id="loading-user"></strong>...</span>
+    </div>
+
+    <!-- DASHBOARD (grid: sidebar + content) -->
+    <div class="dashboard" id="dashboard">
+        <aside class="profile-sidebar" id="profile-sidebar"></aside>
+        <div class="content-area">
+            <div class="status-bar" id="status-bar"></div>
+            <nav class="nav" id="nav-tabs">
+                <button class="nav-btn active" data-tab="overview">Visao Geral</button>
+                <button class="nav-btn" data-tab="posts">Publicacoes</button>
+            </nav>
+            <section id="sec-overview" class="section active"></section>
+            <section id="sec-posts" class="section"></section>
         </div>
-
-        <!-- SECTIONS -->
-        <section id="sec-overview" class="section active"></section>
-        <section id="sec-posts" class="section"></section>
-        <section id="sec-temporal" class="section"></section>
-        <section id="sec-content" class="section"></section>
-
-    </main>
+    </div>
 
     <!-- FOOTER -->
-    <footer class="footer">
-        InstaMetrics v1.0 — Dados publicos do Instagram via Cloudflare Workers
-    </footer>
+    <footer class="footer">InstaMetrics v1.0 — Dados publicos do Instagram via Cloudflare Workers</footer>
 
-    <script src="js/charts.js"></script>
-    <script src="js/app.js"></script>
+</div>
+<script src="js/charts.js"></script>
+<script src="js/app.js"></script>
 </body>
 </html>
