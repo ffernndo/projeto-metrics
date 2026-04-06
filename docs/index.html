@@ -3,161 +3,94 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>InstaMetrics — Instagram Public Analytics</title>
-    <meta name="description" content="Dashboard de analytics publico para perfis do Instagram. Analise metricas de engajamento, conteudo e padroes temporais.">
+    <title>InstaMetrics - Instagram Analytics Dashboard</title>
+    <meta name="description" content="Analise metricas reais de qualquer perfil publico do Instagram.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
     <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
 </head>
 <body>
-
-<!-- Mobile Toggle -->
 <button class="mobile-toggle" id="mobile-toggle">☰</button>
-
 <div class="app-container">
-
-    <!-- ===== Sidebar ===== -->
-    <aside class="sidebar">
-        <div class="logo">
-            <h1><span>Insta</span>Metrics</h1>
-            <p>Public Instagram Analytics</p>
-        </div>
-
+    <aside class="sidebar" id="sidebar">
+        <div class="logo"><h1><span>Insta</span>Metrics</h1><p>Instagram Analytics</p></div>
         <div class="divider"></div>
-
         <div class="sidebar-section">
             <h3>Pesquisar Perfil</h3>
-            <div class="search-group">
-                <input type="text" class="search-input" id="search-input" placeholder="ex: natgeo">
-            </div>
-            <button class="btn-primary" id="btn-search" style="margin-top:8px;">🔍 Analisar Perfil</button>
-
-            <div class="demo-profiles" style="margin-top:12px;">
-                <span style="font-size:11px;color:#8888A0;">Perfis demo:</span>
-                <div class="demo-chip" data-username="natgeo">@natgeo</div>
-                <div class="demo-chip" data-username="instagram">@instagram</div>
-                <div class="demo-chip" data-username="cristiano">@cristiano</div>
+            <input type="text" class="search-input" id="search-input" placeholder="Digite @username">
+            <button class="btn-primary" id="btn-search">🔍 Analisar Perfil</button>
+            <div class="demo-profiles">
+                <span class="demo-label">Perfis demo:</span>
+                <div class="demo-chip" data-u="natgeo">@natgeo</div>
+                <div class="demo-chip" data-u="instagram">@instagram</div>
+                <div class="demo-chip" data-u="cristiano">@cristiano</div>
             </div>
         </div>
-
         <div class="divider"></div>
-
         <div class="sidebar-section">
             <h3>Navegacao</h3>
             <ul class="nav-list">
-                <li class="nav-item active" data-page="overview">
-                    <span class="nav-icon">📊</span> Visao Geral
-                </li>
-                <li class="nav-item" data-page="posts">
-                    <span class="nav-icon">📝</span> Analise de Posts
-                </li>
-                <li class="nav-item" data-page="temporal">
-                    <span class="nav-icon">🕐</span> Analise Temporal
-                </li>
-                <li class="nav-item" data-page="content">
-                    <span class="nav-icon">💡</span> Inteligencia de Conteudo
-                </li>
+                <li class="nav-item active" data-page="overview"><span class="ni">📊</span> Visao Geral</li>
+                <li class="nav-item" data-page="posts"><span class="ni">📝</span> Analise de Posts</li>
+                <li class="nav-item" data-page="temporal"><span class="ni">🕐</span> Analise Temporal</li>
+                <li class="nav-item" data-page="content"><span class="ni">💡</span> Conteudo</li>
             </ul>
         </div>
-
         <div class="divider"></div>
-
-        <div class="sidebar-footer">
-            <p>InstaMetrics v1.0<br>Dados publicos via Instaloader</p>
-        </div>
+        <div class="sidebar-footer">InstaMetrics v1.0</div>
     </aside>
-
-    <!-- ===== Main Content ===== -->
     <main class="main-content">
-
-        <!-- Welcome Screen -->
+        <div id="banner" class="banner" style="display:none"></div>
+        <div id="loading" class="loading" style="display:none"><div class="spinner"></div><p>Buscando dados de <span id="loading-user"></span>...</p></div>
         <div id="welcome" class="welcome">
             <div class="welcome-box">
                 <h1><span>Insta</span>Metrics</h1>
-                <p class="subtitle">Analise metricas publicas de qualquer perfil do Instagram</p>
+                <p class="subtitle">Analise metricas de qualquer perfil publico do Instagram</p>
                 <div class="instructions">
                     <h3>Como usar:</h3>
                     <ol>
                         <li>Digite um <strong>@username</strong> na barra de pesquisa</li>
                         <li>Clique em <strong>Analisar Perfil</strong></li>
-                        <li>Navegue pelas paginas de analise</li>
+                        <li>Navegue pelas 4 paginas de analise</li>
                     </ol>
-                    <p class="hint"><strong>Perfis demo disponiveis:</strong> natgeo, instagram, cristiano</p>
+                    <p class="hint"><strong>Perfis demo:</strong> natgeo, instagram, cristiano</p>
                 </div>
             </div>
         </div>
-
-        <!-- Dashboard (hidden until profile loaded) -->
-        <div id="dashboard" style="display:none;">
-
-            <!-- Demo Banner -->
-            <div class="demo-banner" id="demo-banner" style="display:none;">
-                📋 Modo Demo — Exibindo dados de exemplo pre-carregados
-            </div>
-
-            <!-- PAGE: Overview -->
+        <div id="dashboard" style="display:none">
             <div id="page-overview" class="page active">
                 <div class="profile-card" id="ov-profile"></div>
                 <div class="kpi-grid" id="ov-kpis"></div>
                 <div class="insight-grid" id="ov-insights"></div>
-                <div class="chart-row">
-                    <div class="chart-box"><div id="ov-chart-engagement"></div></div>
-                    <div class="chart-box"><div id="ov-chart-top"></div></div>
-                </div>
+                <div class="chart-row"><div class="chart-box"><div id="ov-c1"></div></div><div class="chart-box"><div id="ov-c2"></div></div></div>
             </div>
-
-            <!-- PAGE: Posts -->
             <div id="page-posts" class="page">
                 <div class="section-header">Analise de Posts</div>
-                <div class="chart-row">
-                    <div class="chart-box"><div id="ps-chart-dist"></div></div>
-                    <div class="chart-box"><div id="ps-chart-pie"></div></div>
-                </div>
-                <div class="chart-full">
-                    <div class="chart-box"><div id="ps-chart-type"></div></div>
-                </div>
-                <div class="section-header" style="margin-top:16px;">Top 10 Posts por Engagement</div>
+                <div class="chart-row"><div class="chart-box"><div id="ps-c1"></div></div><div class="chart-box"><div id="ps-c2"></div></div></div>
+                <div class="chart-full chart-box"><div id="ps-c3"></div></div>
+                <div class="section-header">Top 10 Posts por Engagement</div>
                 <div class="chart-box" id="ps-table"></div>
             </div>
-
-            <!-- PAGE: Temporal -->
             <div id="page-temporal" class="page">
                 <div class="section-header">Analise Temporal</div>
                 <div class="insight-grid insight-grid-3" id="tp-insights"></div>
-                <div class="chart-full">
-                    <div class="chart-box"><div id="tp-chart-heatmap"></div></div>
-                </div>
-                <div class="chart-row">
-                    <div class="chart-box"><div id="tp-chart-day"></div></div>
-                    <div class="chart-box"><div id="tp-chart-hour"></div></div>
-                </div>
-                <div class="chart-full">
-                    <div class="chart-box"><div id="tp-chart-freq"></div></div>
-                </div>
+                <div class="chart-full chart-box"><div id="tp-c1"></div></div>
+                <div class="chart-row"><div class="chart-box"><div id="tp-c2"></div></div><div class="chart-box"><div id="tp-c3"></div></div></div>
+                <div class="chart-full chart-box"><div id="tp-c4"></div></div>
             </div>
-
-            <!-- PAGE: Content -->
             <div id="page-content" class="page">
                 <div class="section-header">Inteligencia de Conteudo</div>
-                <div class="chart-full">
-                    <div class="chart-box"><div id="ct-chart-caption"></div></div>
-                </div>
-                <div class="chart-row">
-                    <div class="chart-box"><div id="ct-chart-hashtag"></div></div>
-                    <div class="chart-box"><div id="ct-chart-type"></div></div>
-                </div>
-                <div class="section-header">Insights de Conteudo</div>
+                <div class="chart-full chart-box"><div id="ct-c1"></div></div>
+                <div class="chart-row"><div class="chart-box"><div id="ct-c2"></div></div><div class="chart-box"><div id="ct-c3"></div></div></div>
+                <div class="section-header">Insights</div>
                 <div class="chart-row" id="ct-insights"></div>
             </div>
-
         </div>
-
     </main>
-
 </div>
-
-<script src="js/data.js"></script>
 <script src="js/charts.js"></script>
 <script src="js/app.js"></script>
-
 </body>
 </html>
