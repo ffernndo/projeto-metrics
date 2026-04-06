@@ -9,12 +9,20 @@ function extractHashtags(t){return(t.match(/#(\w+)/g)||[]).map(h=>h.slice(1))}
 function showBanner(msg,type){const b=document.getElementById("banner");b.className="banner "+type;b.textContent=msg;b.style.display="block"}
 function hideBanner(){document.getElementById("banner").style.display="none"}
 
-// ===== CORS Proxy - Busca Real =====
+// ===== Busca Real via Cloudflare Worker =====
+// Configure a URL do seu Worker aqui apos o deploy:
+const WORKER_URL = "https://instametrics-proxy.YOUR_SUBDOMAIN.workers.dev";
+
 async function fetchLiveProfile(username){
+    // Metodo 1: Cloudflare Worker (melhor, mais confiavel)
+    try{
+        const r=await fetch(WORKER_URL+"?username="+encodeURIComponent(username),{signal:AbortSignal.timeout(10000)});
+        if(r.ok){const data=await r.json();if(data&&data.profile&&data.profile.followers>0)return data}
+    }catch(e){}
+    // Metodo 2: Fallback CORS proxies
     const proxies=[
         u=>"https://api.allorigins.win/raw?url="+encodeURIComponent(u),
         u=>"https://api.codetabs.com/v1/proxy?quest="+encodeURIComponent(u),
-        u=>"https://corsproxy.io/?url="+encodeURIComponent(u),
     ];
     const igUrl="https://www.instagram.com/"+username+"/";
     for(const proxy of proxies){
