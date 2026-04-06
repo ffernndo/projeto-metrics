@@ -3,8 +3,7 @@
  * Cloudflare Worker que busca dados publicos de perfis do Instagram
  * e retorna JSON estruturado para o frontend.
  *
- * Deploy: npx wrangler deploy
- * Ou cole este codigo em https://workers.cloudflare.com/ (dashboard)
+ * Tenta multiplos metodos de busca com fallback automatico.
  */
 
 const CORS_HEADERS = {
@@ -40,43 +39,160 @@ export default {
 };
 
 async function fetchInstagramProfile(username) {
-  // Buscar pagina publica do Instagram
-  const response = await fetch(`https://www.instagram.com/${username}/`, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-      Accept:
-        "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.5",
-      "Cache-Control": "no-cache",
-    },
-    redirect: "follow",
-  });
+  // Metodo 1: Web Profile API (mais confiavel)
+  const apiData = await tryWebProfileAPI(username);
+  if (apiData) return apiData;
 
-  if (!response.ok) return null;
+  // Metodo 2: Pagina publica com headers realistas
+  const htmlData = await tryPublicPage(username);
+  if (htmlData) return htmlData;
 
-  const html = await response.text();
+  // Metodo 3: Pagina mobile
+  const mobileData = await tryMobilePage(username);
+  if (mobileData) return mobileData;
 
-  // Extrair dados dos meta tags
-  const profile = parseMetaTags(html, username);
-  if (!profile) return null;
-
-  // Tentar extrair posts do HTML embutido
-  const posts = parseEmbeddedPosts(html);
-
-  return { profile, posts };
+  return null;
 }
 
+// --- Metodo 1: Instagram Web Profile API ---
+async function tryWebProfileAPI(username) {
+  try {
+    const r = await fetch(
+      `https://i.instagram.com/api/v1/users/web_profile_info/?username=${username}`,
+      {
+        headers: {
+          "User-Agent": "Instagram 275.0.0.27.98 Android (33/13; 420dpi; 1080x2400; samsung; SM-G991B; o1s; exynos2100; en_US; 458229258)",
+          "X-IG-App-ID": "936619743392459",
+          "X-IG-WWW-Claim": "0",
+          "X-Requested-With": "XMLHttpRequest",
+          "Accept": "application/json",
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+      }
+    );
+    if (!r.ok) return null;
+
+    const data = await r.json();
+    const user = data?.data?.user;
+    if (!user) return null;
+
+    const profile = {
+      username: user.username,
+      full_name: user.full_name || username,
+      biography: user.biography || "",
+      followers: user.edge_followed_by?.count || 0,
+      following: user.edge_follow?.count || 0,
+      media_count: user.edge_owner_to_timeline_media?.count || 0,
+      is_verified: user.is_verified || false,
+      profile_pic_url: user.profile_pic_url_hd || user.profile_pic_url || "",
+      external_url: user.external_url || "",
+      is_business: user.is_business_account || false,
+    };
+
+    if (profile.followers === 0 && !user.edge_followed_by) return null;
+
+    // Extrair posts se disponiveis
+    const posts = [];
+    const edges = user.edge_owner_to_timeline_media?.edges || [];
+    for (const edge of edges) {
+      const node = edge.node;
+      posts.push({
+        shortcode: node.shortcode,
+        caption: node.edge_media_to_caption?.edges?.[0]?.node?.text || "",
+        likes: node.edge_liked_by?.count || node.edge_media_preview_like?.count || 0,
+        comments: node.edge_media_to_comment?.count || 0,
+        timestamp: new Date(node.taken_at_timestamp * 1000).toISOString(),
+        media_type: node.is_video ? "VIDEO" : node.__typename === "GraphSidecar" ? "CAROUSEL" : "IMAGE",
+        is_video: node.is_video || false,
+        video_view_count: node.video_view_count || null,
+        url: `https://www.instagram.com/p/${node.shortcode}/`,
+        thumbnail_url: node.thumbnail_src || node.display_url || "",
+      });
+    }
+
+    return { profile, posts: posts.length > 0 ? posts : null };
+  } catch (e) {
+    return null;
+  }
+}
+
+// --- Metodo 2: Pagina publica HTML com headers de browser real ---
+async function tryPublicPage(username) {
+  try {
+    const r = await fetch(`https://www.instagram.com/${username}/`, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": '"macOS"',
+        "Upgrade-Insecure-Requests": "1",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
+      },
+      redirect: "follow",
+    });
+
+    if (!r.ok) return null;
+
+    const html = await r.text();
+
+    // Verificar se Instagram retornou pagina de login em vez do perfil
+    if (html.includes('"loginPage"') || html.includes("/accounts/login/")) {
+      // Tentar extrair meta tags mesmo da pagina de login (Instagram serve OG tags mesmo assim)
+      if (!html.includes('og:description')) return null;
+    }
+
+    const profile = parseMetaTags(html, username);
+    if (!profile) return null;
+
+    const posts = parseEmbeddedPosts(html);
+    return { profile, posts };
+  } catch (e) {
+    return null;
+  }
+}
+
+// --- Metodo 3: Pagina mobile ---
+async function tryMobilePage(username) {
+  try {
+    const r = await fetch(`https://www.instagram.com/${username}/`, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Cache-Control": "no-cache",
+      },
+      redirect: "follow",
+    });
+
+    if (!r.ok) return null;
+    const html = await r.text();
+
+    const profile = parseMetaTags(html, username);
+    if (!profile) return null;
+
+    const posts = parseEmbeddedPosts(html);
+    return { profile, posts };
+  } catch (e) {
+    return null;
+  }
+}
+
+// --- Parsers ---
 function parseMetaTags(html, username) {
-  // og:description: "284M Followers, 152 Following, 32.5K Posts - See Instagram photos..."
   const descMatch = html.match(
     /<meta\s+(?:property|name)="og:description"\s+content="([^"]+)"/i
   );
   if (!descMatch && !html.includes(username)) return null;
 
-  let followers = 0,
-    following = 0,
-    mediaCount = 0;
+  let followers = 0, following = 0, mediaCount = 0;
 
   if (descMatch) {
     const desc = descMatch[1];
@@ -90,7 +206,9 @@ function parseMetaTags(html, username) {
     }
   }
 
-  // og:title: "National Geographic (@natgeo)"
+  // Se nao achou followers nos meta tags, o perfil nao foi retornado
+  if (followers === 0) return null;
+
   const titleMatch = html.match(
     /<meta\s+(?:property|name)="og:title"\s+content="([^"]+)"/i
   );
@@ -102,13 +220,11 @@ function parseMetaTags(html, username) {
     else fullName = title.replace(/\s*\(.*\)/, "").trim();
   }
 
-  // og:image: profile picture
   const imgMatch = html.match(
     /<meta\s+(?:property|name)="og:image"\s+content="([^"]+)"/i
   );
   const profilePicUrl = imgMatch ? imgMatch[1] : "";
 
-  // Bio from description (after the stats part)
   let biography = "";
   if (descMatch) {
     const bioMatch = descMatch[1].match(
@@ -117,7 +233,6 @@ function parseMetaTags(html, username) {
     if (bioMatch && bioMatch[1]) biography = bioMatch[1].trim();
   }
 
-  // Verificado
   const isVerified =
     html.includes("is_verified") &&
     (html.includes('"is_verified":true') ||
@@ -138,10 +253,8 @@ function parseMetaTags(html, username) {
 }
 
 function parseEmbeddedPosts(html) {
-  // Tentar extrair _sharedData ou dados JSON embutidos
   const posts = [];
 
-  // Metodo 1: window._sharedData
   const sharedMatch = html.match(
     /window\._sharedData\s*=\s*(\{.+?\});\s*<\/script>/s
   );
@@ -156,16 +269,11 @@ function parseEmbeddedPosts(html) {
           const node = edge.node;
           posts.push({
             shortcode: node.shortcode,
-            caption:
-              node.edge_media_to_caption?.edges?.[0]?.node?.text || "",
+            caption: node.edge_media_to_caption?.edges?.[0]?.node?.text || "",
             likes: node.edge_liked_by?.count || node.edge_media_preview_like?.count || 0,
             comments: node.edge_media_to_comment?.count || 0,
             timestamp: new Date(node.taken_at_timestamp * 1000).toISOString(),
-            media_type: node.is_video
-              ? "VIDEO"
-              : node.__typename === "GraphSidecar"
-              ? "CAROUSEL"
-              : "IMAGE",
+            media_type: node.is_video ? "VIDEO" : node.__typename === "GraphSidecar" ? "CAROUSEL" : "IMAGE",
             is_video: node.is_video || false,
             video_view_count: node.video_view_count || null,
             url: `https://www.instagram.com/p/${node.shortcode}/`,
@@ -173,41 +281,28 @@ function parseEmbeddedPosts(html) {
           });
         }
       }
-    } catch (e) {
-      // JSON parse failed, continue
-    }
+    } catch (e) {}
   }
 
-  // Metodo 2: require("PolarisProfilePostsTabContent") ou similar
   const additionalMatch = html.match(
-    /\"edge_owner_to_timeline_media\":\{(.+?)\},"edge_saved_media"/s
+    /"edge_owner_to_timeline_media":\{(.+?)\},"edge_saved_media"/s
   );
   if (!posts.length && additionalMatch) {
     try {
       const mediaData = JSON.parse(
-        '{"edge_owner_to_timeline_media":{' +
-          additionalMatch[1] +
-          '}}'
+        '{"edge_owner_to_timeline_media":{' + additionalMatch[1] + "}}"
       );
-      const edges =
-        mediaData.edge_owner_to_timeline_media?.edges;
+      const edges = mediaData.edge_owner_to_timeline_media?.edges;
       if (edges) {
         for (const edge of edges) {
           const node = edge.node;
           posts.push({
             shortcode: node.shortcode || "",
-            caption:
-              node.edge_media_to_caption?.edges?.[0]?.node?.text || "",
+            caption: node.edge_media_to_caption?.edges?.[0]?.node?.text || "",
             likes: node.edge_liked_by?.count || node.edge_media_preview_like?.count || 0,
             comments: node.edge_media_to_comment?.count || 0,
-            timestamp: new Date(
-              node.taken_at_timestamp * 1000
-            ).toISOString(),
-            media_type: node.is_video
-              ? "VIDEO"
-              : node.__typename === "GraphSidecar"
-              ? "CAROUSEL"
-              : "IMAGE",
+            timestamp: new Date(node.taken_at_timestamp * 1000).toISOString(),
+            media_type: node.is_video ? "VIDEO" : node.__typename === "GraphSidecar" ? "CAROUSEL" : "IMAGE",
             is_video: node.is_video || false,
             video_view_count: node.video_view_count || null,
             url: `https://www.instagram.com/p/${node.shortcode}/`,
@@ -215,9 +310,7 @@ function parseEmbeddedPosts(html) {
           });
         }
       }
-    } catch (e) {
-      // Continue without posts
-    }
+    } catch (e) {}
   }
 
   return posts.length > 0 ? posts : null;

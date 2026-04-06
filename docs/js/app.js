@@ -11,7 +11,7 @@ function hideBanner(){document.getElementById("banner").style.display="none"}
 
 // ===== Busca Real via Cloudflare Worker =====
 // Configure a URL do seu Worker aqui apos o deploy:
-const WORKER_URL = "https://instametrics-proxy.YOUR_SUBDOMAIN.workers.dev";
+const WORKER_URL = "https://atualizador.fernando-cezar-f-s.workers.dev";
 
 async function fetchLiveProfile(username){
     // Metodo 1: Cloudflare Worker (melhor, mais confiavel)
