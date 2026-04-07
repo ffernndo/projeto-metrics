@@ -282,7 +282,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Clean error on input focus
     document.getElementById("hero-input").addEventListener("focus", () => { const err = document.getElementById("hero-error"); if (err) err.remove(); });
 
-    // Parallax box on hero
+    // Parallax on hero box
     const hero = document.getElementById("hero");
     const box = document.getElementById("hero-box");
     if (hero && box) {
@@ -290,10 +290,10 @@ document.addEventListener("DOMContentLoaded", () => {
             const rect = hero.getBoundingClientRect();
             const cx = (e.clientX - rect.left) / rect.width - 0.5;
             const cy = (e.clientY - rect.top) / rect.height - 0.5;
-            box.style.transform = "translateY(-50%) translate(" + (cx * 30) + "px, " + (cy * 20) + "px)";
+            box.style.transform = "translate(" + (cx * 12) + "px, " + (cy * 8) + "px)";
         });
         hero.addEventListener("mouseleave", () => {
-            box.style.transform = "translateY(-50%)";
+            box.style.transform = "translate(0, 0)";
         });
     }
 });
