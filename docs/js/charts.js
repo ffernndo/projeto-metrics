@@ -30,7 +30,7 @@ function ml(o) {
 function chartEngagementLine(el, df) {
     const s = [...df].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
     const x = s.map(d => d.timestamp), y = s.map(d => d.engagement_rate);
-    const t = [{ x, y, mode: "lines+markers", name: "Engagement", line: { color: C.teal, width: 2 }, marker: { size: 4 }, hovertemplate: "<b>%{x|%d/%m/%Y}</b><br>%{y:.3f}%<extra></extra>" }];
+    const t = [{ x, y, mode: "lines+markers", name: "Engagement", line: { color: C.teal, width: 2 }, marker: { size: 4 }, hovertemplate: "<b>%{x|%d/%m/%Y}</b><br>Engagement: %{y:.3f}%<br><i>(likes+comments)/followers×100</i><extra></extra>" }];
     if (s.length >= 7) {
         const ma = y.map((_, i) => i < 6 ? null : y.slice(i - 6, i + 1).reduce((a, b) => a + b, 0) / 7);
         t.push({ x, y: ma, mode: "lines", name: "Media Movel (7)", line: { color: C.blue, width: 2, dash: "dash" }, hovertemplate: "<b>%{x|%d/%m/%Y}</b><br>%{y:.3f}%<extra></extra>" });
@@ -65,13 +65,15 @@ function chartEngHour(el, df) {
 
 function chartMediaPie(el, df) {
     const ct = {}; df.forEach(d => { ct[d.media_type] = (ct[d.media_type] || 0) + 1; });
+    const total = df.length;
     const lb = Object.keys(ct), vl = Object.values(ct), cm = { IMAGE: C.teal, VIDEO: C.blue, CAROUSEL: C.purple };
     Plotly.newPlot(el, [{
         labels: lb, values: vl, type: "pie", hole: .45,
         marker: { colors: lb.map(l => cm[l] || C.green), line: { color: "#0d1117", width: 2 } },
-        textinfo: "label+percent", textfont: { size: 11, color: "#e6edf3" },
-        hovertemplate: "<b>%{label}</b><br>%{value} posts (%{percent})<extra></extra>"
-    }], ml({ showlegend: false, height: 240, margin: { l: 16, r: 16, t: 12, b: 16 } }), PC);
+        textinfo: "percent", textfont: { size: 12, color: "#e6edf3" },
+        hovertemplate: "<b>%{label}</b><br>%{value} de " + total + " posts<br>%{percent}<extra></extra>",
+        domain: { x: [0.05, 0.95], y: [0.02, 0.98] }
+    }], ml({ showlegend: false, height: 260, margin: { l: 10, r: 10, t: 10, b: 10 } }), PC);
 }
 
 function chartHashtags(el, ht) {
