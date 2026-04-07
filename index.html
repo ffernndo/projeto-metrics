@@ -14,7 +14,6 @@
 <body>
 <div class="main" id="app">
 
-    <!-- HEADER (hidden until .calculated) -->
     <header class="header">
         <div class="header-left">
             <span class="header-logo"><span>Insta</span>Metrics</span>
@@ -26,7 +25,6 @@
         </div>
     </header>
 
-    <!-- HERO (clean entry page) -->
     <div class="hero" id="hero">
         <div class="hero-box" id="hero-box">
             <h1><span>Insta</span>Metrics</h1>
@@ -36,32 +34,22 @@
                 <button class="hero-btn" id="hero-btn">Analisar</button>
             </div>
             <p class="hero-hint">Funciona com qualquer perfil publico</p>
+            <div class="hero-loader"><div class="spinner"></div><span id="hero-loading-text">Buscando...</span></div>
         </div>
     </div>
 
-    <!-- LOADING -->
-    <div class="loading" id="loading">
-        <div class="spinner"></div>
-        <span>Buscando dados de <strong id="loading-user"></strong>...</span>
-    </div>
-
-    <!-- DASHBOARD (grid: sidebar + content) -->
     <div class="dashboard" id="dashboard">
-        <aside class="profile-sidebar" id="profile-sidebar"></aside>
-        <div class="content-area">
-            <div class="status-bar" id="status-bar"></div>
-            <nav class="nav" id="nav-tabs">
-                <button class="nav-btn active" data-tab="overview">Visao Geral</button>
-                <button class="nav-btn" data-tab="posts">Publicacoes</button>
-            </nav>
-            <section id="sec-overview" class="section active"></section>
-            <section id="sec-posts" class="section"></section>
-        </div>
+        <div class="profile-bar" id="profile-bar"></div>
+        <div class="status-bar" id="status-bar"></div>
+        <nav class="nav" id="nav-tabs">
+            <button class="nav-btn active" data-tab="overview">Visao Geral</button>
+            <button class="nav-btn" data-tab="posts">Publicacoes</button>
+        </nav>
+        <section id="sec-overview" class="section active"></section>
+        <section id="sec-posts" class="section"></section>
     </div>
 
-    <!-- FOOTER -->
     <footer class="footer">InstaMetrics v1.0 — Dados publicos do Instagram via Cloudflare Workers</footer>
-
 </div>
 <script src="js/charts.js"></script>
 <script src="js/app.js"></script>
