@@ -116,7 +116,6 @@ async function tryWebProfileAPI(username) {
       "Accept": "application/json",
     };
 
-    // Usar ultimo post ID como cursor inicial
     let nextMaxId = "";
     if (edges.length > 0) {
       const lastId = edges[edges.length - 1]?.node?.id;
@@ -124,11 +123,14 @@ async function tryWebProfileAPI(username) {
     }
 
     let attempts = 0;
-    while (nextMaxId && posts.length < TARGET_POSTS && attempts < 8) {
+    while (nextMaxId && posts.length < TARGET_POSTS && attempts < 4) {
       attempts++;
       try {
-        const feedUrl = `https://i.instagram.com/api/v1/feed/user/${userId}/?count=33&max_id=${nextMaxId}`;
-        const feedR = await fetch(feedUrl, { headers: FEED_HEADERS });
+        const feedUrl = `https://i.instagram.com/api/v1/feed/user/${userId}/?count=12&max_id=${nextMaxId}`;
+        const ctrl = new AbortController();
+        const timeoutId = setTimeout(() => ctrl.abort(), 5000);
+        const feedR = await fetch(feedUrl, { headers: FEED_HEADERS, signal: ctrl.signal });
+        clearTimeout(timeoutId);
         if (!feedR.ok) break;
         const feedData = await feedR.json();
         const items = feedData?.items;
@@ -140,7 +142,7 @@ async function tryWebProfileAPI(username) {
         nextMaxId = feedData.next_max_id || "";
         if (!feedData.more_available || !nextMaxId) break;
       } catch (e) {
-        break; // Feed API falhou, mas ja temos os 12 posts iniciais
+        break;
       }
     }
 
