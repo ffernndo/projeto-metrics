@@ -123,7 +123,7 @@ async function tryWebProfileAPI(username) {
     }
 
     let attempts = 0;
-    while (nextMaxId && posts.length < TARGET_POSTS && attempts < 4) {
+    while (nextMaxId && posts.length < TARGET_POSTS && attempts < 8) {
       attempts++;
       try {
         const feedUrl = `https://i.instagram.com/api/v1/feed/user/${userId}/?count=12&max_id=${nextMaxId}`;
