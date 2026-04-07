@@ -85,11 +85,31 @@ async function loadProfile(username) {
     cache[username] = currentProfile;
     postsPage = 0;
 
-    // Animate hero-box out, then show dashboard
+    // FLIP morphism: hero-box -> profile-bar
     box.classList.remove("loading-state");
     const hero = document.getElementById("hero");
     hero.classList.add("fade-out");
-    setTimeout(() => showDashboard(username), 400);
+
+    setTimeout(() => {
+        // Show dashboard with profile-bar in morphing state
+        document.getElementById("app").classList.add("calculated");
+        renderProfileBar();
+        const bar = document.getElementById("profile-bar");
+        bar.classList.add("morphing");
+
+        // Trigger morph-in animation
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                bar.classList.remove("morphing");
+                bar.classList.add("morph-in");
+                setTimeout(() => bar.classList.remove("morph-in"), 500);
+            });
+        });
+
+        document.getElementById("header-search").value = username;
+        document.getElementById("status-bar").textContent = "@" + username + " — " + fmt(currentProfile.profile.followers) + " seguidores — " + currentProfile.metrics.total + " posts analisados";
+        navigateTo("overview");
+    }, 350);
 }
 
 function showHeroError(title, msg) {
@@ -100,6 +120,7 @@ function showHeroError(title, msg) {
 }
 
 function showDashboard(username) {
+    document.getElementById("hero").style.display = "none";
     document.getElementById("app").classList.add("calculated");
     document.getElementById("header-search").value = username;
     renderProfileBar();
@@ -154,21 +175,25 @@ function renderOverview() {
     let h = '<div class="section-title">Visao Geral</div>';
 
     h += '<div class="kpi-grid">'
-        + kpi("Seguidores", fmt(currentProfile.profile.followers)) + kpi("Engagement Rate", m.avgEngagement.toFixed(3) + "%")
-        + kpi("Media de Likes", fmt(m.avgLikes)) + kpi("Posts / Semana", m.ppw)
+        + kpi("Seguidores", fmt(currentProfile.profile.followers), "Total de seguidores do perfil")
+        + kpi("Engagement Rate", m.avgEngagement.toFixed(3) + "%", "Media de (likes+comments)/followers×100 nos " + m.total + " posts analisados")
+        + kpi("Media de Likes", fmt(m.avgLikes), "Total de likes / numero de posts analisados")
+        + kpi("Posts / Semana", m.ppw, "Frequencia media de publicacoes por semana")
         + '</div>';
 
     if (m.bestDay !== "N/A") {
-        h += '<div class="best-time-card">'
-            + '<div class="best-time-item"><div class="best-time-label">Melhor Dia</div><div class="best-time-value">' + m.bestDay + '</div><div class="best-time-sub">Maior engagement</div></div>'
-            + '<div class="best-time-item"><div class="best-time-label">Melhor Horario</div><div class="best-time-value">' + String(m.bestHour).padStart(2, "0") + ':00</div><div class="best-time-sub">Pico de interacoes</div></div>'
-            + '<div class="best-time-item"><div class="best-time-label">Recomendacao</div><div class="best-time-value" style="font-size:.95rem">' + m.bestDay + ' as ' + String(m.bestHour).padStart(2, "0") + 'h</div><div class="best-time-sub">Horario ideal</div></div>'
+        h += '<div class="grid-3">'
+            + '<div class="card" style="text-align:center" title="Dia da semana com maior taxa media de engagement"><div class="best-time-label">Melhor Dia</div><div class="best-time-value">' + m.bestDay + '</div><div class="best-time-sub">Maior engagement</div></div>'
+            + '<div class="card" style="text-align:center" title="Hora do dia com maior taxa media de engagement"><div class="best-time-label">Melhor Horario</div><div class="best-time-value">' + String(m.bestHour).padStart(2, "0") + ':00</div><div class="best-time-sub">Pico de interacoes</div></div>'
+            + '<div class="card" style="text-align:center" title="Combinacao ideal de dia e hora para publicar"><div class="best-time-label">Recomendacao</div><div class="best-time-value" style="font-size:.95rem">' + m.bestDay + ' as ' + String(m.bestHour).padStart(2, "0") + 'h</div><div class="best-time-sub">Horario ideal</div></div>'
             + '</div>';
     }
 
     h += '<div class="insight-grid">'
-        + insight(fmt(m.avgComments), "Media Comentarios") + insight(m.lcRatio + ":1", "Likes / Comments")
-        + insight(m.ffRatio + ":1", "Seg. / Seguindo") + insight(m.consistency + "%", "Consistencia")
+        + insight(fmt(m.avgComments), "Media Comentarios", "Total de comentarios / numero de posts")
+        + insight(m.lcRatio + ":1", "Likes / Comments", "Razao entre total de likes e total de comentarios")
+        + insight(m.ffRatio + ":1", "Seg. / Seguindo", "Razao entre seguidores e seguindo")
+        + insight(m.consistency + "%", "Consistencia", "100% - coeficiente de variacao da frequencia semanal")
         + '</div>';
 
     if (df.length > 0) {
@@ -209,12 +234,6 @@ function renderPosts() {
     let h = '<div class="section-title">Publicacoes</div>';
     h += '<p class="posts-note">Metricas calculadas com base em ' + df.length + ' posts — Exibindo ' + (start + 1) + '-' + (start + pageItems.length) + ' de ' + sorted.length + '</p>';
 
-    // Charts (usam TODOS os posts, nao paginados)
-    h += '<div class="grid-2">'
-        + '<div class="card"><div class="card-title">Distribuicao de Engagement</div><div class="chart-container" id="ps-c1"></div></div>'
-        + '<div class="card"><div class="card-title">Engagement por Tipo</div><div class="chart-container-sm" id="ps-c2"></div></div>'
-        + '</div>';
-
     // Post cards (paginados)
     h += '<div class="posts-grid">';
     pageItems.forEach(p => {
@@ -251,8 +270,7 @@ function renderPosts() {
     document.getElementById("sec-posts").innerHTML = h;
 
     // Charts
-    chartEngagementDist(document.getElementById("ps-c1"), df);
-    chartTypeEng(document.getElementById("ps-c2"), df);
+    // Charts removidos da aba Posts - estao na Visao Geral
 
     // Pager events
     const prev = document.getElementById("pager-prev");
@@ -263,8 +281,8 @@ function renderPosts() {
 
 // ═══ HELPERS ═══
 
-function kpi(label, value) { return '<div class="kpi-card"><div class="kpi-label">' + label + '</div><div class="kpi-value">' + value + '</div></div>'; }
-function insight(value, label) { return '<div class="insight-card"><div class="insight-value">' + value + '</div><div class="insight-label">' + label + '</div></div>'; }
+function kpi(label, value, tip) { return '<div class="kpi-card"' + (tip ? ' title="' + tip + '"' : '') + '><div class="kpi-label">' + label + '</div><div class="kpi-value">' + value + '</div></div>'; }
+function insight(value, label, tip) { return '<div class="insight-card"' + (tip ? ' title="' + tip + '"' : '') + '><div class="insight-value">' + value + '</div><div class="insight-label">' + label + '</div></div>'; }
 
 // ═══ EVENTOS ═══
 
@@ -272,14 +290,22 @@ document.addEventListener("DOMContentLoaded", () => {
     // Hero search
     document.getElementById("hero-btn").addEventListener("click", () => loadProfile(document.getElementById("hero-input").value));
     document.getElementById("hero-input").addEventListener("keypress", e => { if (e.key === "Enter") loadProfile(e.target.value); });
-    // Header search (new profile)
+    // Header search (new profile - stay in dashboard mode)
     document.getElementById("header-btn").addEventListener("click", () => {
-        cache = {};
-        document.getElementById("app").classList.remove("calculated");
-        document.getElementById("hero").classList.remove("fade-out");
-        document.getElementById("hero-box").classList.remove("loading-state");
-        document.getElementById("hero-input").value = document.getElementById("header-search").value;
-        loadProfile(document.getElementById("header-search").value);
+        const u = document.getElementById("header-search").value.toLowerCase().replace(/@/g, "").trim();
+        if (!u) return;
+        if (cache[u]) { currentProfile = cache[u]; postsPage = 0; showDashboard(u); return; }
+        // Fetch directly without going back to hero
+        document.getElementById("status-bar").textContent = "Buscando @" + u + "...";
+        document.getElementById("status-bar").style.color = "var(--text-secondary)";
+        fetchLiveProfile(u).then(raw => {
+            if (!raw) { document.getElementById("status-bar").textContent = "Perfil nao encontrado: @" + u; document.getElementById("status-bar").style.color = "var(--accent-red)"; return; }
+            currentProfile = processData(raw);
+            cache[u] = currentProfile;
+            postsPage = 0;
+            showDashboard(u);
+            document.getElementById("status-bar").style.color = "";
+        }).catch(() => { document.getElementById("status-bar").textContent = "Erro ao buscar @" + u; document.getElementById("status-bar").style.color = "var(--accent-red)"; });
     });
     document.getElementById("header-search").addEventListener("keypress", e => {
         if (e.key === "Enter") { document.getElementById("header-btn").click(); }
